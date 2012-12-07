@@ -22,7 +22,7 @@ namespace NWN
 {
 	namespace Parsers
 	{
-		ref class ExoParseBuffer
+		public ref class ExoParseBuffer
 		{
 
 		public:
@@ -1138,7 +1138,7 @@ namespace NWN
 
 		};
 
-		ref class ExoBuildBuffer
+		public ref class ExoBuildBuffer
 		{
 
 		public:

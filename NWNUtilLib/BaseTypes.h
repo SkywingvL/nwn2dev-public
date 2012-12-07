@@ -109,12 +109,12 @@ namespace NWN
 	// NWN2 uses 32-byte RESREFs.
 	//
 
-	ref struct ResRef32
+	public ref struct ResRef32
 	{
 		String ^ RefStr;
 	};
 
-	ref struct ResRef16
+	public ref struct ResRef16
 	{
 		String ^ RefStr;
 	};
@@ -134,7 +134,7 @@ namespace NWN
 	// either a raw string or a STRREF.
 	//
 
-	ref struct ExoLocString
+	public ref struct ExoLocString
 	{
 		bool        IsStrRef;
 		String    ^ String;
@@ -147,7 +147,7 @@ namespace NWN
 	// always, used to represent three spatial coordinates.
 	//
 
-	ref struct Vector3
+	public ref struct Vector3
 	{
 		float x;
 		float y;
@@ -159,7 +159,7 @@ namespace NWN
 	// always, used to represent two spatial coordinates.
 	//
 
-	ref struct Vector2
+	public ref struct Vector2
 	{
 		float x;
 		float y;
@@ -169,7 +169,7 @@ namespace NWN
 	// Define a 4x4 matrix (raw data only).
 	//
 
-	ref struct Matrix44
+	public ref struct Matrix44
 	{
 		float _00;
 		float _01;
@@ -195,7 +195,7 @@ namespace NWN
 	// Define a 3x3 matrix (raw data only).
 	//
 
-	ref struct Matrix33
+	public ref struct Matrix33
 	{
 		float _00;
 		float _01;
@@ -214,7 +214,7 @@ namespace NWN
 	// Define the wire format of a Quaternion.
 	//
 
-	ref struct Quaternion
+	public ref struct Quaternion
 	{
 		float x;
 		float y;
@@ -226,7 +226,7 @@ namespace NWN
 	// Define simple float-based rectangle and triangle types.
 	//
 
-	ref struct Rect
+	public ref struct Rect
 	{
 		float left;
 		float top;
@@ -238,7 +238,7 @@ namespace NWN
 	// Define the on-network representation of color values (range 0.0f..1.0f).
 	//
 
-	ref struct NWNCOLOR // D3DXCOLOR
+	public ref struct NWNCOLOR // D3DXCOLOR
 	{
 		float r;
 		float g;
@@ -251,7 +251,7 @@ namespace NWN
 	// 0.0f..1.0f).
 	//
 
-	ref struct NWNRGB
+	public ref struct NWNRGB
 	{
 		float r;
 		float g;
@@ -263,7 +263,7 @@ namespace NWN
 	// network.
 	//
 
-	ref struct NWN2_UVScrollSet
+	public ref struct NWN2_UVScrollSet
 	{
 		bool                  Scroll;
 		float                 U;
@@ -276,7 +276,7 @@ namespace NWN
 	// hotbar parameters server-side.
 	//
 
-	ref struct NWN2_DataElement
+	public ref struct NWN2_DataElement
 	{
 		List< bool>            Bools;
 		List< int >            Ints;
@@ -291,7 +291,7 @@ namespace NWN
 	// Item property data.
 	//
 
-	ref struct NWItemProperty
+	public ref struct NWItemProperty
 	{
 		unsigned short   PropertyName;
 		unsigned short   SubType;
@@ -303,14 +303,14 @@ namespace NWN
 	// Location data.
 	//
 
-	ref struct ObjectLocation
+	public ref struct ObjectLocation
 	{
 		NWN::OBJECTID Area;
 		NWN::Vector3  Orientation;
 		NWN::Vector3  Position;
 	};
 
-	ref struct NWN2_LightIntensityPair
+	public ref struct NWN2_LightIntensityPair
 	{
 		NWN::NWNCOLOR DiffuseColor;
 		NWN::NWNCOLOR SpecularColor;
