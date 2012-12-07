@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Parsers">
+      <UniqueIdentifier>{3ca3626e-00cf-49e0-9f33-1b7061f0ff13}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Precomp.cpp" />
+    <ClCompile Include="Parsers\BufferBuilder.cpp">
+      <Filter>Parsers</Filter>
+    </ClCompile>
+    <ClCompile Include="Parsers\BufferParser.cpp">
+      <Filter>Parsers</Filter>
+    </ClCompile>
+    <ClCompile Include="Parsers\NetBuffer.cpp">
+      <Filter>Parsers</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Precomp.h" />
+    <ClInclude Include="Parsers\BufferBuilder.h">
+      <Filter>Parsers</Filter>
+    </ClInclude>
+    <ClInclude Include="Parsers\BufferParser.h">
+      <Filter>Parsers</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseTypes.h" />
+    <ClInclude Include="Parsers\NetBuffer.h">
+      <Filter>Parsers</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
