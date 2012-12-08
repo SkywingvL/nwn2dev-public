@@ -465,6 +465,7 @@ namespace NWN
 				return true;
 			}
 
+#if 0
 			inline
 			bool
 			ReadDWORD(
@@ -501,6 +502,7 @@ namespace NWN
 
 				return true;
 			}
+#endif
 
 			inline
 			bool
@@ -735,6 +737,34 @@ namespace NWN
 					return NULL;
 
 				return DataPtr;
+			}
+
+			inline
+			array< Byte > ^
+			ReadBytes(
+				__in size_t FieldLength
+				)
+			{
+				unsigned char * DataPtr = (unsigned char *) ReadVOIDPtr( FieldLength );
+
+				if (DataPtr == NULL)
+					return nullptr;
+
+				try
+				{
+					array< Byte > ^ DataArray = gcnew array< Byte >( FieldLength );
+
+					for (size_t i = 0; i < FieldLength; i += 1)
+					{
+						DataArray[ i ] = DataPtr[ i ];
+					}
+
+					return DataArray;
+				}
+				catch (Exception ^)
+				{
+					return nullptr;
+				}
 			}
 
 			inline
