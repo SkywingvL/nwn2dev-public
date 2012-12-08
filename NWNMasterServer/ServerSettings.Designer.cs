@@ -61,5 +61,17 @@ namespace NWNMasterServer {
                 this["MOTD"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LogFileName {
+            get {
+                return ((string)(this["LogFileName"]));
+            }
+            set {
+                this["LogFileName"] = value;
+            }
+        }
     }
 }

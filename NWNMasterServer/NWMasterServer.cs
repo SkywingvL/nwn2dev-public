@@ -46,6 +46,13 @@ namespace NWNMasterServer
         /// </summary>
         public void Run()
         {
+            //
+            // Set the log file first, if one existed.
+            //
+
+            if (!String.IsNullOrEmpty(ServerSettings.Default.LogFileName))
+                Logger.OpenLogFile(ServerSettings.Default.LogFileName);
+
             try
             {
                 bool IsShutdown = false;

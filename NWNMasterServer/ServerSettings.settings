@@ -1,5 +1,5 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
-<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="NWNMasterServer" GeneratedClassName="NWMasterServer">
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="NWNMasterServer" GeneratedClassName="ServerSettings">
   <Profiles />
   <Settings>
     <Setting Name="BindAddress" Type="System.String" Scope="User">
@@ -16,6 +16,9 @@ http://nwn2forums.bioware.com
  
 Having trouble creating or joining games?  Please visit Atari's Customer Support at:
 http://www.atarisupport.com</Value>
+    </Setting>
+    <Setting Name="LogFileName" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
     </Setting>
   </Settings>
 </SettingsFile>

@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.IO;
 
 namespace NWNMasterServer
 {
@@ -44,7 +45,35 @@ namespace NWNMasterServer
                 String.Format(Format, Inserts));
 
             Console.WriteLine(Formatted);
+
+            if (LogFile != null)
+            {
+                LogFile.WriteLine(Formatted);
+                LogFile.Flush();
+            }
         }
+
+        /// <summary>
+        /// Set a global log file to log to.
+        /// </summary>
+        /// <param name="LogFileName">Supplies the log file name.</param>
+        public static void OpenLogFile(string LogFileName)
+        {
+            try
+            {
+                StreamWriter Writer = new StreamWriter(LogFileName, true, Encoding.UTF8);
+
+                Writer.AutoFlush = false;
+
+                LogFile = Writer;
+            }
+            catch (Exception)
+            {
+                return;
+            }
+        }
+
+        private static StreamWriter LogFile = null;
 
     }
 }
