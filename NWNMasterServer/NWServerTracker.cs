@@ -141,6 +141,7 @@ namespace NWNMasterServer
                 if ((Create != false) && (Server == null))
                 {
                     Server = new NWGameServer(MasterServer, ServerAddress);
+                    ActiveServerTable.Add(ServerAddress, Server);
                 }
             }
 
@@ -156,10 +157,23 @@ namespace NWNMasterServer
         private const int SERVER_LIFETIME = 60;
 
         /// <summary>
+        /// The minimum amount of time between which a live heartbeat causes a
+        /// server's last activity status to be refreshed in the database in
+        /// the absence of any other events occuring.
+        /// </summary>
+        private const int HEARTBEAT_SAVE = 60;
+
+        /// <summary>
         /// The heartbeat cutoff time span, derived from SERVER_LIFETIME and
         /// used for heartbeat comparisons.
         /// </summary>
         public static TimeSpan HeartbeatCutoffTimeSpan = TimeSpan.FromSeconds(SERVER_LIFETIME);
+
+        /// <summary>
+        /// The heartbeat save timespan, derived from HEARTBEAT_SAVE and used
+        /// for autosave.
+        /// </summary>
+        public static TimeSpan HeartbeatSaveTimeSpan = TimeSpan.FromSeconds(HEARTBEAT_SAVE);
 
         /// <summary>
         /// The list of active game servers that have had live connectivity in

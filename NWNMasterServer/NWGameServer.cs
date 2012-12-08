@@ -80,6 +80,193 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// Record activity for the server.  The server is assumed to be
+        /// unlocked.
+        /// </summary>
+        /// <param name="ResetPlayerCount">Supplies true if the player count is
+        /// to be reset if the server is transitioning to an online state, else
+        /// false if the existing player count is assumed to be up to date,
+        /// e.g. because the caller already updated it.</param>
+        public void RecordActivity()
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                //
+                // If it has been an extended duration since the last save event,
+                // then save the server to the database so that it is persisted as
+                // being online (even if idle with respect to players coming or
+                // going).
+                //
+
+                if (Online)
+                {
+                    Timesave(Now);
+                }
+                else
+                {
+                    Online = true;
+                    LastHeartbeat = Now;
+                    StartHeartbeat();
+                    Save();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when a heartbeat is requested (server not locked).
+        /// </summary>
+        /// <param name="PlayerCount">Supplies the active player count.</param>
+        public void OnHeartbeat(uint PlayerCount)
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                //
+                // If the server is currently offline, transition it to the
+                // online state and save.
+                //
+                // If the server is already online and the player count has
+                // changed, then update the player count and save.
+                //
+                // Otherwise, refresh the heartbeat time and perform a periodic
+                // save of the last heartbeat timer (if necessary).
+                //
+
+                if (!Online)
+                {
+                    Online = true;
+                    ActivePlayerCount = PlayerCount;
+                    LastHeartbeat = Now;
+                    StartHeartbeat();
+                    Save();
+                }
+                else if (ActivePlayerCount != PlayerCount)
+                {
+                    ActivePlayerCount = PlayerCount;
+                    LastHeartbeat = Now;
+                    Save();
+                }
+                else
+                {
+                    Timesave(Now);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when a shutdown notification for a server is received.
+        /// </summary>
+        public void OnShutdownNotify()
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                LastHeartbeat = Now;
+
+                if (!Online)
+                    return;
+
+                ActivePlayerCount = 0;
+                Online = false;
+                StopHeartbeat();
+                Save();
+            }
+        }
+
+        /// <summary>
+        /// Called when a startup notification for a server is received.
+        /// </summary>
+        /// <param name="Platform">Supplies the platform code.</param>
+        /// <param name="BuildNumber">Supplies the build number.</param>
+        public void OnStartupNotify(Byte Platform, UInt16 BuildNumber)
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                if ((this.Platform != Platform) ||
+                    (this.BuildNumber != BuildNumber) ||
+                    (Online == false))
+                {
+                    LastHeartbeat = Now;
+                    this.Platform = Platform;
+                    this.BuildNumber = BuildNumber;
+                    ActivePlayerCount = 0;
+
+                    if (!Online)
+                    {
+                        Online = true;
+                        StartHeartbeat();
+                    }
+
+                    Save();
+                }
+                else
+                {
+                    Timesave(Now);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when a module load notification for a server is received.
+        /// </summary>
+        /// <param name="ExpansionsMask">Supplies the expansion
+        /// bitmask.</param>
+        /// <param name="ModuleName">Supplies the module name.</param>
+        public void OnModuleLoad(Byte ExpansionsMask, string ModuleName)
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                if ((this.ExpansionsMask != ExpansionsMask) ||
+                    (this.ModuleName != ModuleName) ||
+                    (Online == false))
+                {
+                    LastHeartbeat = Now;
+                    this.ExpansionsMask = ExpansionsMask;
+                    this.ModuleName = ModuleName;
+
+                    if (!Online)
+                    {
+                        Online = true;
+                        StartHeartbeat();
+                    }
+
+                    Save();
+                }
+                else
+                {
+                    Timesave(Now);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Initiate an auto save if necessary.  The server is assumed to be
+        /// locked.
+        /// </summary>
+        /// <param name="Now">Supplies the time stamp to save at.</param>
+        private void Timesave(DateTime Now)
+        {
+            if ((Now >= LastHeartbeat) &&
+                (Now - LastHeartbeat) >= NWServerTracker.HeartbeatCutoffTimeSpan)
+            {
+                LastHeartbeat = Now;
+                Save();
+            }
+            else
+            {
+                LastHeartbeat = Now;
+            }
+        }
+
+        /// <summary>
         /// Handle a heartbeat timer elapse event, by requesting a heartbeat.
         /// </summary>
         /// <param name="sender">Unused.</param>
@@ -97,9 +284,10 @@ namespace NWNMasterServer
 
             lock (this)
             {
-                if ((Now >= LastHeartbeat) ||
-                    (Now - LastHeartbeat) < NWServerTracker.HeartbeatCutoffTimeSpan)
+                if ((Now >= LastHeartbeat) &&
+                    (Now - LastHeartbeat) >= NWServerTracker.HeartbeatCutoffTimeSpan)
                 {
+                    ActivePlayerCount = 0;
                     Online = false;
                     Expired = true;
                 }

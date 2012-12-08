@@ -1,0 +1,21 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="NWNMasterServer" GeneratedClassName="NWMasterServer">
+  <Profiles />
+  <Settings>
+    <Setting Name="BindAddress" Type="System.String" Scope="User">
+      <Value Profile="(Default)">0.0.0.0</Value>
+    </Setting>
+    <Setting Name="BuildNumber" Type="System.String" Scope="User">
+      <Value Profile="(Default)">1765</Value>
+    </Setting>
+    <Setting Name="MOTD" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Welcome to Neverwinter Nights 2!
+ 
+Please join us at the Official Neverwinter Nights 2 forums at:
+http://nwn2forums.bioware.com
+ 
+Having trouble creating or joining games?  Please visit Atari's Customer Support at:
+http://www.atarisupport.com</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

@@ -80,8 +80,9 @@ namespace NWNMasterServer
 
                 ServerTracker.QueueInitialHeartbeats();
 
-                Logger.Log("NWMasterServer.Run(): Master server version {0} initialized.",
-                    Assembly.GetExecutingAssembly().GetName().Version);
+                Logger.Log("NWMasterServer.Run(): Master server version {0} initialized (game build advertised: {1}).",
+                    Assembly.GetExecutingAssembly().GetName().Version,
+                    BuildNumber);
 
                 //
                 // Block waiting for a quit request.  Once requested, initiate
@@ -133,7 +134,12 @@ namespace NWNMasterServer
         /// </summary>
         private void BindSocket()
         {
-            IPEndPoint LocalEndPoint = new IPEndPoint(IPAddress.Any, MASTER_SERVER_PORT);
+            EndPoint LocalEndPoint;
+
+            if (String.IsNullOrEmpty(BindAddress))
+                LocalEndPoint = new IPEndPoint(IPAddress.Any, MASTER_SERVER_PORT);
+            else
+                LocalEndPoint = new IPEndPoint(IPAddress.Parse(BindAddress), MASTER_SERVER_PORT);
 
             ServerSocket.Blocking = false;
             ServerSocket.Bind(LocalEndPoint);
@@ -148,17 +154,23 @@ namespace NWNMasterServer
         {
             //
             // If shutdown is in process, then prevent new receive operations
-            // from being initiated.
+            // from being initiated and wake the main thread if the last
+            // pending receive has been drained.
             //
 
             if (QuitRequested)
+            {
+                if (PendingBuffers == 0)
+                    QuitEvent.Set();
+
                 return;
+            }
 
             try
             {
                 PendingBuffers += 1;
                 EndPoint RecvEndPoint = (EndPoint)Buffer.Sender;
-                ServerSocket.BeginReceiveFrom(
+                IAsyncResult Result = ServerSocket.BeginReceiveFrom(
                     Buffer.Buffer,
                     0,
                     Buffer.Buffer.Length,
@@ -213,19 +225,19 @@ namespace NWNMasterServer
                 Logger.Log("NWMasterServer.RecvCompletionCallback(): EndReceiveFrom failed: Exception: {0}", e);
             }
 
-            PendingBuffers -= 1;
-
             try
             {
                 if (RecvLen > 0)
                 {
-                    OnRecvDatagram(Buffer.Buffer, RecvLen, Buffer.Sender);
+                    OnRecvDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint);
                 }
             }
             catch (Exception e)
             {
                 Logger.Log("NWMasterServer.RecvCompletionCallback(): Exception: {0}", e);
             }
+
+            PendingBuffers -= 1;
 
             InitiateReceive(Buffer);
         }
@@ -326,6 +338,14 @@ namespace NWNMasterServer
                     OnRecvMstModuleLoadNotify(ParseBuffer, Sender);
                     break;
 
+                case (uint)MstCmd.MOTDRequest:
+                    OnRecvMstMOTDRequest(ParseBuffer, Sender);
+                    break;
+
+                case (uint)MstCmd.VersionRequest:
+                    OnRecvMstVersionRequest(ParseBuffer, Sender);
+                    break;
+
             }
         }
 
@@ -366,8 +386,6 @@ namespace NWNMasterServer
                 return;
 
             SendMstCommunityAccountAuthorization(Sender, AccountName, ConnectStatus.CONNECT_ERR_SUCCESS);
-
-            RecordGameServerActivity(Sender);
         }
 
         /// <summary>
@@ -452,7 +470,15 @@ namespace NWNMasterServer
 
             SendMstCDKeyAuthorization(Sender, CDKeyHashes);
 
-            RecordGameServerActivity(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            //
+            // Record activity for the server and request an updated player
+            // count.
+            //
+
+            Server.RecordActivity();
+            SendMstDemandHeartbeat(Sender);
         }
 
         /// <summary>
@@ -490,7 +516,10 @@ namespace NWNMasterServer
                 PlayerCDKeyList.Add(CDKeyList);
             }
 
-            RecordGameServerActivity(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+            Server.OnHeartbeat((uint)PlayerCDKeyList.Count);
+
+            Logger.Log("NWMasterServer.OnRecvMstHeartbeat(): Server {0} ActivePlayerCount={1}.", Sender, PlayerCDKeyList.Count);
         }
 
         /// <summary>
@@ -527,7 +556,16 @@ namespace NWNMasterServer
                 CDKeyList.Add(CDKey);
             }
 
-            RecordGameServerActivity(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            //
+            // Record activity for the server and request an updated player
+            // count.
+            //
+
+            Server.RecordActivity();
+            SendMstDemandHeartbeat(Sender);
+            Logger.Log("NWMasterServer.OnRecvMstDisconnectNotify()");
         }
 
         /// <summary>
@@ -543,7 +581,17 @@ namespace NWNMasterServer
             if (!Parser.ReadWORD(out DataPort))
                 return;
 
-            RecordGameServerShutdown(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
+
+            if (Server == null)
+                return;
+
+            //
+            // Record the server shutdown.
+            //
+
+            Server.OnShutdownNotify();
+            Logger.Log("NWMasterServer.OnRecvMstShutdownNotify(): Server {0} shut down.", Sender);
         }
 
         /// <summary>
@@ -577,7 +625,14 @@ namespace NWNMasterServer
             if (!Parser.ReadBYTE(out Unknown4))
                 return;
 
-            RecordGameServerActivity(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            //
+            // Record the server startup.
+            //
+
+            Server.OnStartupNotify(Platform, BuildNumber);
+            Logger.Log("NWMasterServer.OnRecvMstStartupNotify(): Server {0} Platform={1} BuildNumber={2}.", Sender, (char)Platform, BuildNumber);
         }
 
         /// <summary>
@@ -596,7 +651,63 @@ namespace NWNMasterServer
             if (!Parser.ReadSmallString(out ModuleName, 16))
                 return;
 
-            RecordGameServerActivity(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            //
+            // Record the module load and request an updated player count.
+            //
+
+            Server.OnModuleLoad(ExpansionsMask, ModuleName);
+            SendMstDemandHeartbeat(Sender);
+
+            Logger.Log("NWMasterServer.OnRecvMstModuleLoadNotify(): Server {0} ModuleName={1} ExpansionsMask={2}.", Sender, ModuleName, ExpansionsMask);
+        }
+
+        /// <summary>
+        /// This method parses and handles a MOTD request from a game server or
+        /// game client.
+        /// </summary>
+        /// <param name="Parser">Supplies the message parse context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvMstMOTDRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            UInt16 DataPort;
+            Byte Unknown0; // 0
+            Byte Unknown1; // 0
+
+            if (!Parser.ReadWORD(out DataPort))
+                return;
+            if (!Parser.ReadBYTE(out Unknown0))
+                return;
+            if (!Parser.ReadBYTE(out Unknown1))
+                return;
+
+            SendMstMOTD(Sender, MOTD);
+        }
+
+        /// <summary>
+        /// This method parses and handles a version request from a game server
+        /// or game client.
+        /// </summary>
+        /// <param name="Parser">Supplies the message parse context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvMstVersionRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            UInt16 DataPort;
+            Byte Unknown0; // 0
+            Byte Unknown1; // 0
+            Byte Unknown2; // 1
+
+            if (!Parser.ReadWORD(out DataPort))
+                return;
+            if (!Parser.ReadBYTE(out Unknown0))
+                return;
+            if (!Parser.ReadBYTE(out Unknown1))
+                return;
+            if (!Parser.ReadBYTE(out Unknown2))
+                return;
+
+            SendMstVersion(Sender, BuildNumber);
         }
 
         /// <summary>
@@ -663,6 +774,42 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// This method sends the message of the day to a game server, or game
+        /// client.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="Message">Supplies the announcement message.</param>
+        public void SendMstMOTD(IPEndPoint Address, string Message)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)MstCmd.MOTDResponse);
+            Builder.WriteSmallString(Message, 16);
+
+            Logger.Log("NWMasterServer.SendMstMOTD(): Sending MOTD to {0}.", Address);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
+        /// This method sends the current build number to a game server, or
+        /// game client.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="BuildNumber">Supplies the build number string.</param>
+        public void SendMstVersion(IPEndPoint Address, string BuildNumber)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)MstCmd.VersionResponse);
+            Builder.WriteSmallString(BuildNumber, 16);
+
+            Logger.Log("NWMasterServer.SendMstVersion(): Sending version to {0}.", Address);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
         /// This method transmits a raw datagram to a master server client,
         /// such as a game server or game client.
         /// </summary>
@@ -721,7 +868,7 @@ namespace NWNMasterServer
                     // system.
                     //
 
-                    ServerSocket.BeginSendTo(
+                    IAsyncResult Result = ServerSocket.BeginSendTo(
                         CompositeBuffer,
                         0,
                         (int)CompositeBufferLength,
@@ -782,6 +929,8 @@ namespace NWNMasterServer
             ShutdownNotify = 0x54534d42, // BMST
             StartupNotify = 0x55534d42, // BMSU
             ModuleLoadNotify = 0x4f4d4d42, // BMMO
+            MOTDRequest = 0x414d4d42, // BMMA
+            VersionRequest = 0x41524d42, // BMRA
 
             //
             // Master server to game server (or game client) requests.
@@ -790,6 +939,8 @@ namespace NWNMasterServer
             CommunityAuthorization = 0x52504d42, // BMPR
             CDKeyAuthorization = 0x52414d42, // BMAR
             DemandHeartbeat = 0x48444d42, // BMDH
+            MOTDResponse = 0x424d4d42, // BMMB
+            VersionResponse = 0x42524d42, // BMRB
         }
 
         /// <summary>
@@ -877,6 +1028,21 @@ namespace NWNMasterServer
         /// The server tracker instance that retains state about known servers.
         /// </summary>
         private NWServerTracker ServerTracker = null;
+
+        /// <summary>
+        /// The server bind address.
+        /// </summary>
+        private string BindAddress = ServerSettings.Default.BindAddress;
+
+        /// <summary>
+        /// The server game build number.
+        /// </summary>
+        private string BuildNumber = ServerSettings.Default.BuildNumber;
+
+        /// <summary>
+        /// The server message of the day.
+        /// </summary>
+        private string MOTD = ServerSettings.Default.MOTD;
 
         /// <summary>
         /// Return the server tracker object for external users.
