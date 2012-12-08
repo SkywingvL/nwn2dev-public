@@ -47,9 +47,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Logger.cs" />
+    <Compile Include="NWGameServer.cs" />
     <Compile Include="NWMasterServer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="NWServerTracker.cs" />
     <Compile Include="ServiceController.cs">
       <SubType>Component</SubType>
     </Compile>

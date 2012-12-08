@@ -20,6 +20,8 @@ using System.Text;
 using System.Threading;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using NWN;
 using NWN.Parsers;
 
@@ -62,7 +64,8 @@ namespace NWNMasterServer
                     InitiateReceive(Buffers[i]);
                 }
 
-                Logger.Log("NWMasterServer.Run(): Master server initialized.");
+                Logger.Log("NWMasterServer.Run(): Master server version {0} initialized.",
+                    Assembly.GetExecutingAssembly().GetName().Version);
 
                 //
                 // Block waiting for a quit request.  Once requested, initiate
@@ -180,6 +183,12 @@ namespace NWNMasterServer
                         e);
                 }
             }
+            catch (Exception e)
+            {
+                RecvLen = -1;
+
+                Logger.Log("NWMasterServer.RecvCompletionCallback(): EndReceiveFrom failed: Exception: {0}", e);
+            }
 
             PendingBuffers -= 1;
 
@@ -196,6 +205,28 @@ namespace NWNMasterServer
             }
 
             InitiateReceive(Buffer);
+        }
+
+        private void SendCompletionCallback(IAsyncResult Result)
+        {
+            int SentBytes;
+            IPEndPoint Recipient = (IPEndPoint)Result.AsyncState;
+
+            try
+            {
+                SentBytes = ServerSocket.EndSendTo(Result);
+            }
+            catch (SocketException e)
+            {
+                Logger.Log("NWMasterServer.SendCompletionCallback(): Unexpected receive error for host {0}: {1} (Exception: {2})",
+                    Recipient,
+                    e.SocketErrorCode,
+                    e);
+            }
+            catch (Exception e)
+            {
+                Logger.Log("NWMasterServer.SendCompletionCallback(): Exception: {0}", e);
+            }
         }
 
         /// <summary>
@@ -215,8 +246,8 @@ namespace NWNMasterServer
             {
                 uint Cmd;
 
-                Cmd = ((uint)Buffer[0] <<  0)  |
-                      ((uint)Buffer[1] <<  8)  |
+                Cmd = ((uint)Buffer[0] <<  0) |
+                      ((uint)Buffer[1] <<  8) |
                       ((uint)Buffer[2] << 16) |
                       ((uint)Buffer[3] << 24);
 
@@ -520,6 +551,100 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// This method sends a community account authorization response to a
+        /// game server, or game client (for initial login).
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="AccountName">Supplies the account name.</param>
+        /// <param name="Status">Supplies the authorization status
+        /// code.</param>
+        private void SendMstCommunityAccountAuthorization(IPEndPoint Address, string AccountName, ConnectStatus Status)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)MstCmd.CommunityAuthorization);
+            Builder.WriteSmallString(AccountName, 16);
+            Builder.WriteWORD((ushort)Status);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
+        /// This method transmits a raw datagram to a master server client,
+        /// such as a game server or game client.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="Builder">Supplies the message body.</param>
+        private void SendRawDataToMstClient(IPEndPoint Address, ExoBuildBuffer Builder)
+        {
+            unsafe
+            {
+                byte* ByteStream;
+                uint ByteStreamLength;
+                byte* BitStream;
+                uint BitStreamLength;
+                byte[] CompositeBuffer;
+                uint CompositeBufferLength;
+
+                Builder.GetBuffer(
+                    out ByteStream,
+                    out ByteStreamLength,
+                    out BitStream,
+                    out BitStreamLength);
+
+                CompositeBufferLength = ByteStreamLength + BitStreamLength;
+
+                if (CompositeBufferLength == 0)
+                    return;
+
+                //
+                // Allocate a contiguous message buffer, and fail here and now
+                // if we can't.
+                //
+
+                try
+                {
+                    CompositeBuffer = new byte[CompositeBufferLength];
+
+                    //
+                    // Assemble the discrete components into a single
+                    // contiguous composite buffer for outbound trnasmission.
+                    //
+
+                    Marshal.Copy(
+                        (IntPtr)ByteStream,
+                        CompositeBuffer,
+                        0,
+                        (int)ByteStreamLength);
+
+                    for (uint i = 0; i < BitStreamLength; i += 1)
+                    {
+                        CompositeBuffer[ByteStreamLength + i] = BitStream[i];
+                    }
+
+                    //
+                    // Transmit the underlying message now that we have
+                    // captured it into a flat buffer consumable by the I/O
+                    // system.
+                    //
+
+                    ServerSocket.BeginSendTo(
+                        CompositeBuffer,
+                        0,
+                        (int)CompositeBufferLength,
+                        SocketFlags.None,
+                        Address,
+                        SendCompletionCallback,
+                        Address);
+                }
+                catch (Exception e)
+                {
+                    Logger.Log("NWMasterServer.SendRawDataToMstClient(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
+                }
+            }
+        }
+
+        /// <summary>
         /// This method marks a game server as still alive (because a message
         /// was received).
         /// </summary>
@@ -553,6 +678,10 @@ namespace NWNMasterServer
         /// </summary>
         private enum MstCmd : uint
         {
+            //
+            // Game server (or game client) to master server requests.
+            //
+
             CommunityAuthorizationRequest = 0x41504d42, // BMPA
             CDKeyAuthorizationRequest = 0x55414d42, // BMAU
             Heartbeat = 0x42484d42, // BMHB
@@ -560,6 +689,38 @@ namespace NWNMasterServer
             ShutdownNotify = 0x54534d42, // BMST
             StartupNotify = 0x55534d42, // BMSU
             ModuleLoadNotify = 0x4f4d4d42, // BMMO
+
+            //
+            // Master server to game server (or game client) requests.
+            //
+
+            CommunityAuthorization = 0x52504d42, // BMPR
+            CDKeyAuthorization = 0x52414d42, // BMAR
+            DemandHeartbeat = 0x48444d42, // BMDH
+        }
+
+        /// <summary>
+        /// Connection response codes for authorization requests.
+        /// </summary>
+        private enum ConnectStatus : uint
+        {
+            CONNECT_ERR_SUCCESS                  = 0x00,
+	        CONNECT_ERR_UNKNOWN                  = 0x01,
+	        CONNECT_ERR_SERVER_VERSIONMISMATCH   = 0x02,
+	        CONNECT_ERR_PASSWORD_INCORRECT       = 0x03,
+	        CONNECT_ERR_SERVER_NOT_MULTIPLAYER   = 0x04,
+	        CONNECT_ERR_SERVER_FULL              = 0x05,
+	        CONNECT_ERR_PLAYER_NAME_IN_USE       = 0x06,
+	        CONNECT_ERR_REPLY_TIMEOUT            = 0x07,
+	        CONNECT_ERR_PLAYER_NAME_REFUSED      = 0x08,
+	        CONNECT_ERR_CD_KEY_IN_USE            = 0x09,
+	        CONNECT_ERR_BANNED                   = 0x0A,
+	        CONNECT_ERR_EXPANSION_PACK_WRONG     = 0x0B,
+	        CONNECT_ERR_CDKEY_UNAUTHORIZED       = 0x0C,
+	        CONNECT_ERR_DM_CONNECTION_REFUSED    = 0x0D,
+	        CONNECT_ERR_ADMIN_CONNECTION_REFUSED = 0x0E,
+	        CONNECT_ERR_LANGUAGE_VERSIONMISMATCH = 0x0F,
+	        CONNECT_ERR_MASTERSERVER_CD_IN_USE   = 0x10,
         }
 
         /// <summary>
