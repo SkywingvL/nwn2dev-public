@@ -27,18 +27,35 @@ namespace NWNMasterServer
     /// </summary>
     internal class NWGameServer
     {
-        public NWGameServer(IPEndPoint ServerAddress)
+        public NWGameServer(NWMasterServer MasterServer, IPEndPoint ServerAddress)
         {
+            this.MasterServer = MasterServer;
             this.Address = ServerAddress;
         }
 
         /// <summary>
-        /// Save the server to the database.  It is assumed that the caller has
-        /// not locked the server instance; this is handled internally.
+        /// Save the server to the database.  The server is assumed to be
+        /// locked.
         /// </summary>
         public void Save()
         {
 
+        }
+
+        /// <summary>
+        /// Start the periodic heartbeat, if it is not already running.  The
+        /// server is assumed to be locked.
+        /// </summary>
+        public void StartHeartbeat()
+        {
+        }
+
+        /// <summary>
+        /// Stop the periodic heartbeat, if it is running.  The server is
+        /// assumed to be locked.
+        /// </summary>
+        public void StopHeartbeat()
+        {
         }
 
         /// <summary>
@@ -98,5 +115,10 @@ namespace NWNMasterServer
         /// The address of the server.
         /// </summary>
         private IPEndPoint Address;
+
+        /// <summary>
+        /// Back link to the underlying master server instance.
+        /// </summary>
+        private NWMasterServer MasterServer;
     }
 }

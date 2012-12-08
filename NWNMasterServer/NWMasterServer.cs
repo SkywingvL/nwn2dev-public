@@ -51,11 +51,20 @@ namespace NWNMasterServer
                 bool IsShutdown = false;
 
                 //
-                // Bind the socket and initiate the initial batch of overlapped
-                // receives.
+                // Bind the socket and prepare it for I/O.
                 //
 
                 BindSocket();
+
+                //
+                // Create the underlying server tracker.
+                //
+
+                ServerTracker = new NWServerTracker(this);
+
+                //
+                // Queue the initial block of receive buffers.
+                //
 
                 for (int i = 0; i < BUFFER_COUNT; i += 1)
                 {
@@ -63,6 +72,13 @@ namespace NWNMasterServer
                     Buffers[i].Sender = new IPEndPoint(0, 0);
                     InitiateReceive(Buffers[i]);
                 }
+
+                //
+                // Inform the server tracker that it is clear to begin
+                // heartbeat operations.
+                //
+
+                ServerTracker.QueueInitialHeartbeats();
 
                 Logger.Log("NWMasterServer.Run(): Master server version {0} initialized.",
                     Assembly.GetExecutingAssembly().GetName().Version);
@@ -342,6 +358,8 @@ namespace NWNMasterServer
             if (!Parser.ReadBYTE(out IsPlayer))
                 return;
 
+            SendMstCommunityAccountAuthorization(Sender, AccountName, ConnectStatus.CONNECT_ERR_SUCCESS);
+
             RecordGameServerActivity(Sender);
         }
 
@@ -362,6 +380,7 @@ namespace NWNMasterServer
             List<CDKeyInfo> CDKeyHashes;
             CDKeyInfo CDKeyHash;
             string AccountName;
+            int KeyIndex;
 
             if (!Parser.ReadWORD(out DataPort))
                 return;
@@ -386,6 +405,7 @@ namespace NWNMasterServer
             CDKeyHashes = new List<CDKeyInfo>();
             CDKeyHash = new CDKeyInfo();
 
+            KeyIndex = 0;
             while (Length-- != 0)
             {
                 UInt16 HashLength;
@@ -397,11 +417,33 @@ namespace NWNMasterServer
                 if ((CDKeyHash.CDKeyHash = Parser.ReadBytes(HashLength)) == null)
                     return;
 
+                //
+                // N.B.  The following is somewhat of a hack in that we are not
+                //       bothering to extract the (real) product type from the
+                //       CD-Key.  As a result, it is possible that the wrong
+                //       answer could be provided for clients without all of
+                //       the expansions; this situation is considered unlikely
+                //       in the current state of affairs.
+                //
+                //       A better fit could be had by examining the expansion
+                //       mask required by the server in the data table, but
+                //       this does not appear worthwhile at this stage.
+                //
+
+                if (KeyIndex == 0)
+                    CDKeyHash.Product = 0;
+                else
+                    CDKeyHash.Product = (UInt16) (1 << (KeyIndex - 1));
+
+                CDKeyHash.AuthStatus = (UInt16)ConnectStatus.CONNECT_ERR_SUCCESS;
+
                 CDKeyHashes.Add(CDKeyHash);
             }
 
             if (!Parser.ReadSmallString(out AccountName, 16))
                 return;
+
+            SendMstCDKeyAuthorization(Sender, CDKeyHashes);
 
             RecordGameServerActivity(Sender);
         }
@@ -558,13 +600,57 @@ namespace NWNMasterServer
         /// <param name="AccountName">Supplies the account name.</param>
         /// <param name="Status">Supplies the authorization status
         /// code.</param>
-        private void SendMstCommunityAccountAuthorization(IPEndPoint Address, string AccountName, ConnectStatus Status)
+        public void SendMstCommunityAccountAuthorization(IPEndPoint Address, string AccountName, ConnectStatus Status)
         {
             ExoBuildBuffer Builder = new ExoBuildBuffer();
 
             Builder.WriteDWORD((uint)MstCmd.CommunityAuthorization);
             Builder.WriteSmallString(AccountName, 16);
             Builder.WriteWORD((ushort)Status);
+
+            Logger.Log("NWMasterServer.SendMstCommunityAccountAuthorization(): Authorizing account {0} for server {1} with status {2}.", AccountName, Address, Status);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
+        /// This method sends a CD-Key authorization response to a game server,
+        /// or game client (for initial login).
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="CDKeys">Supplies the CD-Key list.</param>
+        public void SendMstCDKeyAuthorization(IPEndPoint Address, IList<CDKeyInfo> CDKeys)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)MstCmd.CDKeyAuthorization);
+            Builder.WriteWORD((ushort)CDKeys.Count);
+
+            foreach (CDKeyInfo CDKey in CDKeys)
+            {
+                Builder.WriteSmallString(CDKey.PublicCDKey, 16);
+                Builder.WriteWORD(CDKey.AuthStatus);
+                Builder.WriteWORD(CDKey.Product);
+            }
+
+            Logger.Log("NWMasterServer.SendMstCDKeyAuthorization(): Authorizing {0} CD-Keys for server {1}.", CDKeys, Address);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
+        /// This method sends a heartbeat request to a game server, requesting
+        /// that it reply with a list of current players.  This confirms that
+        /// the server is, in fact, still up and responding.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        public void SendMstDemandHeartbeat(IPEndPoint Address)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)MstCmd.DemandHeartbeat);
+
+            Logger.Log("NWMasterServer.SendMstDemandHeartbeat(): Requesting heartbeat for server {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -702,7 +788,7 @@ namespace NWNMasterServer
         /// <summary>
         /// Connection response codes for authorization requests.
         /// </summary>
-        private enum ConnectStatus : uint
+        public enum ConnectStatus : uint
         {
             CONNECT_ERR_SUCCESS                  = 0x00,
 	        CONNECT_ERR_UNKNOWN                  = 0x01,
@@ -726,10 +812,12 @@ namespace NWNMasterServer
         /// <summary>
         /// CD-Key verification information.
         /// </summary>
-        private struct CDKeyInfo
+        public struct CDKeyInfo
         {
             public string PublicCDKey;
             public byte[] CDKeyHash;
+            public UInt16 AuthStatus;
+            public UInt16 Product;
         }
         
         /// <summary>
@@ -777,5 +865,10 @@ namespace NWNMasterServer
         /// replies with).
         /// </summary>
         private Socket ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+        /// <summary>
+        /// The server tracker instance that retains state about known servers.
+        /// </summary>
+        private NWServerTracker ServerTracker = null;
     }
 }

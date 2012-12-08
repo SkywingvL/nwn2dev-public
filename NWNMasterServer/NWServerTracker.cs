@@ -27,10 +27,49 @@ namespace NWNMasterServer
     {
 
         /// <summary>
-        /// Instantiate a server tracker instance.
+        /// Instantiate a server tracker instance.  The list of currently
+        /// known servers is retrieved from the database, but heartbeats are
+        /// not yet enabled as the I/O subsystem is not yet online.
         /// </summary>
-        public NWServerTracker()
+        /// <param name="MasterServer">Supplies the underlying associated
+        /// master server instance.</param>
+        public NWServerTracker(NWMasterServer MasterServer)
         {
+            this.MasterServer = MasterServer;
+        }
+
+        /// <summary>
+        /// Queue initial heartbeats to active servers
+        /// </summary>
+        public void QueueInitialHeartbeats()
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (ActiveServerTable)
+            {
+                foreach (var Pair in ActiveServerTable)
+                {
+                    NWGameServer Server = Pair.Value;
+
+                    lock (Server)
+                    {
+                        if (!Server.Online)
+                            continue;
+
+                        if ((Server.LastHeartbeat >= Now) ||
+                            (Now - Server.LastHeartbeat) < HeartbeatCutoffTimeSpan)
+                        {
+                            Server.StartHeartbeat();
+                        }
+                        else
+                        {
+                            Server.Online = false;
+                            Server.StopHeartbeat();
+                            Server.Save();
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -54,7 +93,7 @@ namespace NWNMasterServer
 
                 if ((Create != false) && (Server == null))
                 {
-                    Server = new NWGameServer(ServerAddress);
+                    Server = new NWGameServer(MasterServer, ServerAddress);
                 }
             }
 
@@ -69,9 +108,20 @@ namespace NWNMasterServer
         private const int SERVER_LIFETIME = 2 * 24 * 60 * 60;
 
         /// <summary>
+        /// The heartbeat cutoff time span, derived from SERVER_LIFETIME and
+        /// used for heartbeat comparisons.
+        /// </summary>
+        private static TimeSpan HeartbeatCutoffTimeSpan = TimeSpan.FromSeconds(SERVER_LIFETIME);
+
+        /// <summary>
         /// The list of active game servers that have had live connectivity in
         /// the past 48 hours.
         /// </summary>
         private Dictionary<IPEndPoint, NWGameServer> ActiveServerTable = new Dictionary<IPEndPoint, NWGameServer>();
+
+        /// <summary>
+        /// Back link to the underlying master server instance.
+        /// </summary>
+        private NWMasterServer MasterServer;
     }
 }
