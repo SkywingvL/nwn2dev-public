@@ -96,8 +96,15 @@ namespace NWNMasterServer
 
                     if (!IsShutdown)
                     {
+                        //
+                        // Shut down future receives and inform the server
+                        // tracker that new heartbeat requests should be
+                        // drained out.
+                        //
+
                         ServerSocket.Shutdown(SocketShutdown.Receive);
                         IsShutdown = true;
+                        ServerTracker.DrainHeartbeats();
                     }
 
                     if (PendingBuffers == 0)
@@ -870,5 +877,10 @@ namespace NWNMasterServer
         /// The server tracker instance that retains state about known servers.
         /// </summary>
         private NWServerTracker ServerTracker = null;
+
+        /// <summary>
+        /// Return the server tracker object for external users.
+        /// </summary>
+        public NWServerTracker Tracker { get { return ServerTracker;  } }
     }
 }

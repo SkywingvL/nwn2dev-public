@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Net;
+using System.Threading;
 
 namespace NWNMasterServer
 {
@@ -73,6 +74,52 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// This method disables future heartbeats and flushes any servers that
+        /// may be in the heartbeat path out of that code path before further
+        /// forward progress is allowed.
+        /// </summary>
+        public void DrainHeartbeats()
+        {
+            //
+            // Prevent new requestors from spinning up new heartbeat requests.
+            //
+
+            HeartbeatsEnabled = false;
+
+            //
+            // Flush any in-flight requestors out of the heartbeat path by
+            // ensuring that they have released synchronization.
+            //
+
+            Monitor.Enter(HeartbeatLock);
+            Monitor.Exit(HeartbeatLock);
+        }
+
+        /// <summary>
+        /// Request a heartbeat on behalf of a server object.
+        /// </summary>
+        /// <param name="Server">Supplies the server object instance.</param>
+        /// <returns>True if future heartbeats are enabled.</returns>
+        public bool RequestHeartbeat(NWGameServer Server)
+        {
+            //
+            // Check if heartbeats are enabled.  If so, take the heartbeat lock
+            // and request the heartbeat.
+            //
+
+            if (!HeartbeatsEnabled)
+                return false;
+
+            lock (HeartbeatLock)
+            {
+                MasterServer.SendMstDemandHeartbeat(Server.ServerAddress);
+            }
+
+            return true;
+        }
+
+
+        /// <summary>
         /// Attempt to look up a game server by address, creating the server if
         /// requested (if it did not exist).
         /// </summary>
@@ -105,13 +152,14 @@ namespace NWNMasterServer
         /// active (for purposes of sending a heartbeat ping), since the last
         /// successfully received message from the server.
         /// </summary>
-        private const int SERVER_LIFETIME = 2 * 24 * 60 * 60;
+        //private const int SERVER_LIFETIME = 2 * 24 * 60 * 60;
+        private const int SERVER_LIFETIME = 60;
 
         /// <summary>
         /// The heartbeat cutoff time span, derived from SERVER_LIFETIME and
         /// used for heartbeat comparisons.
         /// </summary>
-        private static TimeSpan HeartbeatCutoffTimeSpan = TimeSpan.FromSeconds(SERVER_LIFETIME);
+        public static TimeSpan HeartbeatCutoffTimeSpan = TimeSpan.FromSeconds(SERVER_LIFETIME);
 
         /// <summary>
         /// The list of active game servers that have had live connectivity in
@@ -123,5 +171,15 @@ namespace NWNMasterServer
         /// Back link to the underlying master server instance.
         /// </summary>
         private NWMasterServer MasterServer;
+
+        /// <summary>
+        /// True if heartbears are permitted.
+        /// </summary>
+        private volatile bool HeartbeatsEnabled = true;
+
+        /// <summary>
+        /// The heartbeat lock.
+        /// </summary>
+        private object HeartbeatLock = new object();
     }
 }
