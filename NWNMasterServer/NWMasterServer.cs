@@ -111,6 +111,7 @@ namespace NWNMasterServer
                         //
 
                         ServerSocket.Shutdown(SocketShutdown.Receive);
+                        ServerSocket.Close(15);
                         IsShutdown = true;
                         ServerTracker.DrainHeartbeats();
                     }
@@ -118,8 +119,6 @@ namespace NWNMasterServer
                     if (PendingBuffers == 0)
                         break;
                 }
-
-                ServerSocket.Close(15);
             }
             catch (Exception e)
             {
@@ -206,30 +205,37 @@ namespace NWNMasterServer
             EndPoint RecvEndPoint = (EndPoint)Buffer.Sender;
             int RecvLen;
 
-            try
+            if (!QuitRequested)
             {
-                RecvLen = ServerSocket.EndReceiveFrom(Result, ref RecvEndPoint);
+                try
+                {
+                    RecvLen = ServerSocket.EndReceiveFrom(Result, ref RecvEndPoint);
+                }
+                catch (SocketException e)
+                {
+                    RecvLen = -1;
+
+                    if (e.SocketErrorCode == SocketError.ConnectionReset)
+                    {
+                        RecvLen = 0;
+                    }
+                    else
+                    {
+                        Logger.Log("NWMasterServer.RecvCompletionCallback(): Unexpected receive error: {0} (Exception: {1})",
+                            e.SocketErrorCode,
+                            e);
+                    }
+                }
+                catch (Exception e)
+                {
+                    RecvLen = -1;
+
+                    Logger.Log("NWMasterServer.RecvCompletionCallback(): EndReceiveFrom failed: Exception: {0}", e);
+                }
             }
-            catch (SocketException e)
+            else
             {
                 RecvLen = -1;
-
-                if (e.SocketErrorCode == SocketError.ConnectionReset)
-                {
-                    RecvLen = 0;
-                }
-                else
-                {
-                    Logger.Log("NWMasterServer.RecvCompletionCallback(): Unexpected receive error: {0} (Exception: {1})",
-                        e.SocketErrorCode,
-                        e);
-                }
-            }
-            catch (Exception e)
-            {
-                RecvLen = -1;
-
-                Logger.Log("NWMasterServer.RecvCompletionCallback(): EndReceiveFrom failed: Exception: {0}", e);
             }
 
             try
@@ -956,22 +962,22 @@ namespace NWNMasterServer
         public enum ConnectStatus : uint
         {
             CONNECT_ERR_SUCCESS                  = 0x00,
-	        CONNECT_ERR_UNKNOWN                  = 0x01,
-	        CONNECT_ERR_SERVER_VERSIONMISMATCH   = 0x02,
-	        CONNECT_ERR_PASSWORD_INCORRECT       = 0x03,
-	        CONNECT_ERR_SERVER_NOT_MULTIPLAYER   = 0x04,
-	        CONNECT_ERR_SERVER_FULL              = 0x05,
-	        CONNECT_ERR_PLAYER_NAME_IN_USE       = 0x06,
-	        CONNECT_ERR_REPLY_TIMEOUT            = 0x07,
-	        CONNECT_ERR_PLAYER_NAME_REFUSED      = 0x08,
-	        CONNECT_ERR_CD_KEY_IN_USE            = 0x09,
-	        CONNECT_ERR_BANNED                   = 0x0A,
-	        CONNECT_ERR_EXPANSION_PACK_WRONG     = 0x0B,
-	        CONNECT_ERR_CDKEY_UNAUTHORIZED       = 0x0C,
-	        CONNECT_ERR_DM_CONNECTION_REFUSED    = 0x0D,
-	        CONNECT_ERR_ADMIN_CONNECTION_REFUSED = 0x0E,
-	        CONNECT_ERR_LANGUAGE_VERSIONMISMATCH = 0x0F,
-	        CONNECT_ERR_MASTERSERVER_CD_IN_USE   = 0x10,
+            CONNECT_ERR_UNKNOWN                  = 0x01,
+            CONNECT_ERR_SERVER_VERSIONMISMATCH   = 0x02,
+            CONNECT_ERR_PASSWORD_INCORRECT       = 0x03,
+            CONNECT_ERR_SERVER_NOT_MULTIPLAYER   = 0x04,
+            CONNECT_ERR_SERVER_FULL              = 0x05,
+            CONNECT_ERR_PLAYER_NAME_IN_USE       = 0x06,
+            CONNECT_ERR_REPLY_TIMEOUT            = 0x07,
+            CONNECT_ERR_PLAYER_NAME_REFUSED      = 0x08,
+            CONNECT_ERR_CD_KEY_IN_USE            = 0x09,
+            CONNECT_ERR_BANNED                   = 0x0A,
+            CONNECT_ERR_EXPANSION_PACK_WRONG     = 0x0B,
+            CONNECT_ERR_CDKEY_UNAUTHORIZED       = 0x0C,
+            CONNECT_ERR_DM_CONNECTION_REFUSED    = 0x0D,
+            CONNECT_ERR_ADMIN_CONNECTION_REFUSED = 0x0E,
+            CONNECT_ERR_LANGUAGE_VERSIONMISMATCH = 0x0F,
+            CONNECT_ERR_MASTERSERVER_CD_IN_USE   = 0x10,
         }
 
         /// <summary>

@@ -64,7 +64,8 @@ namespace NWNMasterServer
                 if (StopRequested)
                     Server.Stop();
 
-                Server.Run();
+                ServiceMainThread = new Thread(ServiceMain);
+                ServiceMainThread.Start();
             }
             catch (Exception e)
             {
@@ -72,6 +73,9 @@ namespace NWNMasterServer
             }
         }
 
+        /// <summary>
+        /// Signal a stop request.
+        /// </summary>
         protected override void OnStop()
         {
             //
@@ -92,6 +96,20 @@ namespace NWNMasterServer
 
             if (ServerObject != null)
                 ServerObject.Stop();
+
+            if (ServiceMainThread != null)
+            {
+                ServiceMainThread.Join();
+                ServiceMainThread = null;
+            }
+        }
+
+        /// <summary>
+        /// The main thread for the program running in service mode.
+        /// </summary>
+        private void ServiceMain()
+        {
+            Server.Run();
         }
 
         /// <summary>
@@ -102,7 +120,13 @@ namespace NWNMasterServer
         /// <summary>
         /// True if a stop request was received.
         /// </summary>
-        volatile bool StopRequested;
+        private volatile bool StopRequested;
+
+        /// <summary>
+        /// The main thread object for the service.
+        /// </summary>
+        private Thread ServiceMainThread;
+        
 
     }
 }
