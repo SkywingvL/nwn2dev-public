@@ -1,0 +1,1 @@
+﻿<%@ ServiceHost Language="C#" Debug="true" Service="NWNMasterServerAPI" CodeBehind="~/App_Code/NWNMasterServerAPI.cs" %>
