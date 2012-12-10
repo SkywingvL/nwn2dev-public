@@ -74,7 +74,8 @@ namespace NWNMasterServer
     `local_vault`,
     `last_heartbeat`,
     `server_address`,
-    `online`)
+    `online`,
+    `private_server`)
 VALUES (
     {0},
     {1},
@@ -87,7 +88,8 @@ VALUES (
     {8},
     '{9}',
     '{10}',
-    {11})
+    {11},
+    {12})
 ON DUPLICATE KEY UPDATE 
     `expansions_mask` = {2},
     `build_number` = {3},
@@ -98,7 +100,8 @@ ON DUPLICATE KEY UPDATE
     `local_vault` = {8},
     `last_heartbeat` = '{9}',
     `server_address` = '{10}',
-    `online` = {11}",
+    `online` = {11},
+    `private_server` = {12}",
                 DatabaseId,
                 MasterServer.ProductID,
                 ExpansionsMask,
@@ -110,7 +113,8 @@ ON DUPLICATE KEY UPDATE
                 LocalVault,
                 MasterServer.DateToSQLDate(LastHeartbeat),
                 MySqlHelper.EscapeString(ServerAddress.ToString()),
-                Online
+                Online,
+                PrivateServer
                 );
 
                 MasterServer.ExecuteQueryNoReaderCombine(Query);
@@ -335,6 +339,7 @@ ON DUPLICATE KEY UPDATE
                     (this.ActivePlayerCount != Info.ActivePlayers) ||
                     (this.LocalVault != Info.IsLocalVault) ||
                     (this.BuildNumber != Info.BuildNumber) ||
+                    (this.PrivateServer != Info.HasPlayerPassword) ||
                     (this.ModuleName != Info.ModuleName))
                 {
                     LastHeartbeat = Now;
@@ -342,6 +347,7 @@ ON DUPLICATE KEY UPDATE
                     MaximumPlayerCount = Info.MaximumPlayers;
                     ActivePlayerCount = Info.ActivePlayers;
                     LocalVault = Info.IsLocalVault;
+                    this.PrivateServer = Info.HasPlayerPassword;
                     BuildNumber = Info.BuildNumber;
                     ModuleName = Info.ModuleName;
 
@@ -517,6 +523,11 @@ ON DUPLICATE KEY UPDATE
         /// True if the server is online.
         /// </summary>
         public bool Online { get; set; }
+
+        /// <summary>
+        /// True if the server has a player password.
+        /// </summary>
+        public bool PrivateServer { get; set; }
 
         /// <summary>
         /// The internal database ID of the server, or zero if the server has

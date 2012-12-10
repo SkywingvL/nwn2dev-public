@@ -183,6 +183,7 @@ namespace NWNMasterServer
     `last_heartbeat` datetime NOT NULL,
     `server_address` varchar(128) NOT NULL,
     `online` bool NOT NULL,
+    `private_server` bool NOT NULL,
     PRIMARY KEY (`game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`),
     INDEX (`product_id`, `online`)
@@ -199,7 +200,8 @@ namespace NWNMasterServer
     `local_vault`,
     `last_heartbeat`,
     `server_address`,
-    `online`
+    `online`,
+    `private_server`
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `online` = true
@@ -252,6 +254,7 @@ AND `last_heartbeat` >= '{1}'",
                         Server.LocalVault = Reader.GetBoolean(7);
                         Server.LastHeartbeat = Reader.GetDateTime(8);
                         Server.Online = Reader.GetBoolean(10);
+                        Server.PrivateServer = Reader.GetBoolean(11);
 
                         lock (ActiveServerTable)
                         {
