@@ -339,10 +339,6 @@ namespace NWNMasterServer
                     OnRecvMstDisconnectNotify(ParseBuffer, Sender);
                     break;
 
-                case (uint)MstCmd.ShutdownNotify:
-                    OnRecvMstShutdownNotify(ParseBuffer, Sender);
-                    break;
-
                 case (uint)MstCmd.StartupNotify:
                     OnRecvMstStartupNotify(ParseBuffer, Sender);
                     break;
@@ -357,6 +353,10 @@ namespace NWNMasterServer
 
                 case (uint)MstCmd.VersionRequest:
                     OnRecvMstVersionRequest(ParseBuffer, Sender);
+                    break;
+
+                case (uint)MstCmd.StatusRequest:
+                    OnRecvMstStatusRequest(ParseBuffer, Sender);
                     break;
 
             }
@@ -491,7 +491,7 @@ namespace NWNMasterServer
             //
 
             Server.RecordActivity();
-            SendMstDemandHeartbeat(Sender);
+            SendServerInfoRequest(Sender);
         }
 
         /// <summary>
@@ -547,13 +547,37 @@ namespace NWNMasterServer
             UInt16 EntryCount;
             UInt16 CDKeyCount;
             List<string> CDKeyList;
+            NWGameServer Server;
 
             if (!Parser.ReadWORD(out DataPort))
                 return;
             if (!Parser.ReadWORD(out EntryCount))
                 return;
-            if (EntryCount != 1)
+
+            if (EntryCount == 0)
+            {
+                //
+                // Server shutdown.
+                //
+
+                Server = ServerTracker.LookupServerByAddress(Sender, false);
+
+                if (Server == null)
+                    return;
+
+                //
+                // Record the server shutdown.
+                //
+
+                Server.OnShutdownNotify();
+                Logger.Log("NWMasterServer.OnRecvMstShutdownNotify(): Server {0} shut down.", Sender);
                 return;
+            }
+            else if (EntryCount != 1)
+            {
+                return;
+            }
+
             if (!Parser.ReadWORD(out CDKeyCount))
                 return;
 
@@ -569,7 +593,7 @@ namespace NWNMasterServer
                 CDKeyList.Add(CDKey);
             }
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+            Server = ServerTracker.LookupServerByAddress(Sender);
 
             //
             // Record activity for the server and request an updated player
@@ -577,34 +601,8 @@ namespace NWNMasterServer
             //
 
             Server.RecordActivity();
-            SendMstDemandHeartbeat(Sender);
+            SendServerInfoRequest(Sender);
             Logger.Log("NWMasterServer.OnRecvMstDisconnectNotify()");
-        }
-
-        /// <summary>
-        /// This method parses and handles a server shutdown notify message
-        /// from a game server.
-        /// </summary>
-        /// <param name="Parser">Supplies the message parse context.</param>
-        /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstShutdownNotify(ExoParseBuffer Parser, IPEndPoint Sender)
-        {
-            UInt16 DataPort;
-
-            if (!Parser.ReadWORD(out DataPort))
-                return;
-
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
-
-            if (Server == null)
-                return;
-
-            //
-            // Record the server shutdown.
-            //
-
-            Server.OnShutdownNotify();
-            Logger.Log("NWMasterServer.OnRecvMstShutdownNotify(): Server {0} shut down.", Sender);
         }
 
         /// <summary>
@@ -671,7 +669,7 @@ namespace NWNMasterServer
             //
 
             Server.OnModuleLoad(ExpansionsMask, ModuleName);
-            SendMstDemandHeartbeat(Sender);
+            SendServerInfoRequest(Sender);
 
             Logger.Log("NWMasterServer.OnRecvMstModuleLoadNotify(): Server {0} ModuleName={1} ExpansionsMask={2}.", Sender, ModuleName, ExpansionsMask);
         }
@@ -721,6 +719,124 @@ namespace NWNMasterServer
                 return;
 
             SendMstVersion(Sender, BuildNumber);
+        }
+
+        /// <summary>
+        /// This method parses and handles a status request from a game server
+        /// or game client.
+        /// </summary>
+        /// <param name="Parser">Supplies the message parser context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvMstStatusRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            UInt16 DataPort;
+
+            if (!Parser.ReadWORD(out DataPort))
+                return;
+
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            //
+            // Record module activity.
+            //
+
+            Server.RecordActivity();
+            SendMstStatusResponse(Sender, MstStatus.MST_STATUS_ONLINE);
+        }
+
+        /// <summary>
+        /// This method parses a server info response from a game server.
+        /// </summary>
+        /// <param name="Parser">Supplies the message parser context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvServerInfoResponse(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            UInt16 DataPort;
+            Byte Reserved; // 0xFC
+            Byte HasPlayerPassword;
+            Byte MinLevel;
+            Byte MaxLevel;
+            Byte ActivePlayers;
+            Byte MaximumPlayers;
+            Byte IsLocalVault;
+            Byte PVPLevel;
+            Byte IsPlayerPauseAllowed;
+            Byte IsOnePartyOnly;
+            Byte IsELC;
+            Byte HasILR;
+            Byte ExpansionsMask;
+            string ModuleName;
+            string BuildNumber;
+            ServerInfo Info = new ServerInfo();
+
+            if (!Parser.ReadWORD(out DataPort))
+                return;
+            if (!Parser.ReadBYTE(out Reserved))
+                return;
+            if (Reserved != 0xFC)
+                return;
+            if (!Parser.ReadBYTE(out HasPlayerPassword))
+                return;
+            if (!Parser.ReadBYTE(out MinLevel))
+                return;
+            if (!Parser.ReadBYTE(out MaxLevel))
+                return;
+            if (!Parser.ReadBYTE(out ActivePlayers))
+                return;
+            if (!Parser.ReadBYTE(out MaximumPlayers))
+                return;
+            if (!Parser.ReadBYTE(out IsLocalVault))
+                return;
+            if (!Parser.ReadBYTE(out PVPLevel))
+                return;
+            if (!Parser.ReadBYTE(out IsPlayerPauseAllowed))
+                return;
+            if (!Parser.ReadBYTE(out IsOnePartyOnly))
+                return;
+            if (!Parser.ReadBYTE(out IsELC))
+                return;
+            if (!Parser.ReadBYTE(out HasILR))
+                return;
+            if (!Parser.ReadBYTE(out ExpansionsMask))
+                return;
+            if (!Parser.ReadSmallString(out ModuleName))
+                return;
+            if (!Parser.ReadSmallString(out BuildNumber))
+                return;
+
+            try
+            {
+                Info.BuildNumber = Convert.ToUInt16(BuildNumber);
+            }
+            catch
+            {
+                Info.BuildNumber = 0;
+            }
+
+            Info.HasPlayerPassword = (HasPlayerPassword != 0);
+            Info.MinLevel = MinLevel;
+            Info.MaxLevel = MaxLevel;
+            Info.ActivePlayers = ActivePlayers;
+            Info.MaximumPlayers = MaximumPlayers;
+            Info.IsLocalVault = (IsLocalVault != 0);
+            Info.PVPLevel = PVPLevel;
+            Info.IsPlayerPauseAllowed = (IsPlayerPauseAllowed != 0);
+            Info.IsOnePartyOnly = (IsOnePartyOnly != 0);
+            Info.IsELC = (IsELC != 0);
+            Info.HasILR = (HasILR != 0);
+            Info.ExpansionsMask = ExpansionsMask;
+            Info.ModuleName = ModuleName;
+
+            //
+            // Look up the server and update the current server information.
+            //
+
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            Server.OnServerInfoUpdate(Info);
+
+            Logger.Log("NWMasterServer.OnRecvServerInfoResponse(): Server {0} has {1}/{2} players ({3}).", Sender, Info.ActivePlayers, Info.MaximumPlayers,
+                 Info.ModuleName);
         }
 
         /// <summary>
@@ -818,6 +934,41 @@ namespace NWNMasterServer
             Builder.WriteSmallString(BuildNumber, 16);
 
             Logger.Log("NWMasterServer.SendMstVersion(): Sending version to {0}.", Address);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
+        /// This method sends a master server status response message to a game
+        /// server, or game client.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="StatusFlags">Supplies the master server status flags.
+        /// </param>
+        public void SendMstStatusResponse(IPEndPoint Address, MstStatus StatusFlags)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)MstCmd.StatusResponse);
+            Builder.WriteDWORD((ushort)StatusFlags);
+
+            Logger.Log("NWMasterServer.SendMstStatusResponse(): Sending status response to {0}.", Address);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
+        /// <summary>
+        /// This method sends a server info request to a server.
+        /// </summary>
+        /// <param name="Address">Supplies the game server address.</param>
+        public void SendServerInfoRequest(IPEndPoint Address)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)ConnAuthCmd.ServerInfoRequest);
+            Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
+
+            Logger.Log("NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -939,11 +1090,11 @@ namespace NWNMasterServer
             CDKeyAuthorizationRequest = 0x55414d42, // BMAU
             Heartbeat = 0x42484d42, // BMHB
             DisconnectNotify = 0x43444d42, // BMDC
-            ShutdownNotify = 0x54534d42, // BMST
             StartupNotify = 0x55534d42, // BMSU
             ModuleLoadNotify = 0x4f4d4d42, // BMMO
             MOTDRequest = 0x414d4d42, // BMMA
             VersionRequest = 0x41524d42, // BMRA
+            StatusRequest = 0x54534d42, // BMST
 
             //
             // Master server to game server (or game client) requests.
@@ -954,6 +1105,25 @@ namespace NWNMasterServer
             DemandHeartbeat = 0x48444d42, // BMDH
             MOTDResponse = 0x424d4d42, // BMMB
             VersionResponse = 0x42524d42, // BMRB
+            StatusResponse = 0x52534d42, // BMSR
+        }
+
+        /// <summary>
+        /// Command codes for connection authorization protocol.
+        /// </summary>
+        private enum ConnAuthCmd : uint
+        {
+            //
+            // Client to server requests.
+            //
+
+            ServerInfoRequest = 0x49584e42,
+
+            //
+            // Server to client requests.
+            //
+
+            ServerInfoResponse = 0x52584e42,
         }
 
         /// <summary>
@@ -981,6 +1151,14 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// Master server status flags.
+        /// </summary>
+        public enum MstStatus : ushort
+        {
+            MST_STATUS_ONLINE = 0x0040,
+        }
+
+        /// <summary>
         /// CD-Key verification information.
         /// </summary>
         public struct CDKeyInfo
@@ -989,6 +1167,27 @@ namespace NWNMasterServer
             public byte[] CDKeyHash;
             public UInt16 AuthStatus;
             public UInt16 Product;
+        }
+
+        /// <summary>
+        /// Server information block.
+        /// </summary>
+        public struct ServerInfo
+        {
+            public bool HasPlayerPassword;
+            public uint MinLevel;
+            public uint MaxLevel;
+            public uint ActivePlayers;
+            public uint MaximumPlayers;
+            public bool IsLocalVault;
+            public uint PVPLevel;
+            public bool IsPlayerPauseAllowed;
+            public bool IsOnePartyOnly;
+            public bool IsELC;
+            public bool HasILR;
+            public byte ExpansionsMask;
+            public string ModuleName;
+            public UInt16 BuildNumber;
         }
         
         /// <summary>

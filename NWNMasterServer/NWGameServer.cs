@@ -248,6 +248,47 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// Called when a server info update is available.
+        /// </summary>
+        /// <param name="Info">Supplies the new server information
+        /// structure.</param>
+        public void OnServerInfoUpdate(NWMasterServer.ServerInfo Info)
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                if ((this.ExpansionsMask != Info.ExpansionsMask) ||
+                    (this.MaximumPlayerCount != Info.MaximumPlayers) ||
+                    (this.ActivePlayerCount != Info.ActivePlayers) ||
+                    (this.LocalVault != Info.IsLocalVault) ||
+                    (this.BuildNumber != Info.BuildNumber) ||
+                    (this.ModuleName != Info.ModuleName))
+                {
+                    LastHeartbeat = Now;
+                    ExpansionsMask = Info.ExpansionsMask;
+                    MaximumPlayerCount = Info.MaximumPlayers;
+                    ActivePlayerCount = Info.ActivePlayers;
+                    LocalVault = Info.IsLocalVault;
+                    BuildNumber = Info.BuildNumber;
+                    ModuleName = Info.ModuleName;
+
+                    if (!Online)
+                    {
+                        Online = true;
+                        StartHeartbeat();
+                    }
+
+                    Save();
+                }
+                else
+                {
+                    Timesave(Now);
+                }
+            }
+        }
+
+        /// <summary>
         /// Initiate an auto save if necessary.  The server is assumed to be
         /// locked.
         /// </summary>
@@ -344,6 +385,16 @@ namespace NWNMasterServer
         /// The count of active players on the server.
         /// </summary>
         public uint ActivePlayerCount { get; set; }
+
+        /// <summary>
+        /// The maximum count of players that are allowed on the server.
+        /// </summary>
+        public uint MaximumPlayerCount { get; set; }
+
+        /// <summary>
+        /// True if the server is local vault, false for server vault.
+        /// </summary>
+        public bool LocalVault { get; set; }
 
         /// <summary>
         /// The last datestamp that the server was observed active.
