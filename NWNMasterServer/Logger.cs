@@ -21,6 +21,16 @@ using System.IO;
 namespace NWNMasterServer
 {
     /// <summary>
+    /// Log types for log messages.
+    /// </summary>
+    internal enum LogLevel
+    {
+        Error = 0,
+        Normal = 1,
+        Verbose = 2
+    }
+
+    /// <summary>
     /// This class manages logging diagnostic events.
     /// </summary>
     internal static class Logger
@@ -29,19 +39,24 @@ namespace NWNMasterServer
         /// <summary>
         /// Log a diagnostics message.
         /// </summary>
+        /// <param name="Level">Supplies the log level.</param>
         /// <param name="Format">Supplies the format string.</param>
         /// <param name="Inserts">Supplies optional format inserts.</param>
-        public static void Log(string Format, params object[] Inserts)
+        public static void Log(LogLevel Level, string Format, params object[] Inserts)
         {
+            if (Level > LogFilterLevel)
+                return;
+
             DateTime LogTime = DateTime.UtcNow;
             string Formatted = String.Format(
-                "[{0:D4}-{1:D2}-{2:D2} {3:D2}:{4:D2}:{5:D2}]: {6}",
+                "[{0:D4}-{1:D2}-{2:D2} {3:D2}:{4:D2}:{5:D2}] [LogLevel={6}]: {7}",
                 LogTime.Year,
                 LogTime.Month,
                 LogTime.Day,
                 LogTime.Hour,
                 LogTime.Minute,
                 LogTime.Second,
+                Level,
                 String.Format(Format, Inserts));
 
             Console.WriteLine(Formatted);
@@ -73,6 +88,14 @@ namespace NWNMasterServer
             }
         }
 
+        /// <summary>
+        /// The error log filter level.
+        /// </summary>
+        public static LogLevel LogFilterLevel { get; set; }
+
+        /// <summary>
+        /// The current log file, if any.
+        /// </summary>
         private static StreamWriter LogFile = null;
 
     }

@@ -35,6 +35,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="MySql.Data">
+      <HintPath>..\ReferenceAssemblies\MySql.Data.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Net" />
@@ -49,6 +52,7 @@
     <Compile Include="Logger.cs" />
     <Compile Include="NWGameServer.cs" />
     <Compile Include="NWMasterServer.cs" />
+    <Compile Include="ServerSettings.cs" />
     <Compile Include="ServerSettings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>

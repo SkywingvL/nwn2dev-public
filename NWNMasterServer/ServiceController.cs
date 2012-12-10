@@ -69,7 +69,7 @@ namespace NWNMasterServer
             }
             catch (Exception e)
             {
-                Logger.Log("ServiceController.OnStart(): Exception: {0}", e);
+                Logger.Log(LogLevel.Error, "ServiceController.OnStart(): Exception: {0}", e);
             }
         }
 
@@ -83,7 +83,7 @@ namespace NWNMasterServer
             // service has completed initialization).
             //
 
-            Logger.Log("ServiceController.OnStop(): Service stop requested.");
+            Logger.Log(LogLevel.Normal, "ServiceController.OnStop(): Service stop requested.");
 
             StopRequested = true;
 

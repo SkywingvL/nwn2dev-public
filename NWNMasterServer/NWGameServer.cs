@@ -19,6 +19,7 @@ using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using System.Timers;
+using MySql.Data.MySqlClient;
 
 namespace NWNMasterServer
 {
@@ -49,6 +50,77 @@ namespace NWNMasterServer
         /// </summary>
         public void Save()
         {
+            if (MasterServer.ConnectionString == null)
+                return;
+
+            try
+            {
+                if (ModuleName == null)
+                    ModuleName = "";
+
+                if (ServerName == null)
+                    ServerName = "";
+
+                string Query = String.Format(
+@"INSERT INTO `game_servers` (
+    `game_server_id`,
+    `product_id`,
+    `expansions_mask`,
+    `build_number`,
+    `module_name`,
+    `server_name`,
+    `active_player_count`,
+    `maximum_player_count`,
+    `local_vault`,
+    `last_heartbeat`,
+    `server_address`,
+    `online`)
+VALUES (
+    {0},
+    {1},
+    {2},
+    {3},
+    '{4}',
+    '{5}',
+    {6},
+    {7},
+    {8},
+    '{9}',
+    '{10}',
+    {11})
+ON DUPLICATE KEY UPDATE 
+    `expansions_mask` = {2},
+    `build_number` = {3},
+    `module_name` = '{4}',
+    `server_name` = '{5}',
+    `active_player_count` = {6},
+    `maximum_player_count` = {7},
+    `local_vault` = {8},
+    `last_heartbeat` = '{9}',
+    `server_address` = '{10}',
+    `online` = {11}",
+                DatabaseId,
+                MasterServer.ProductID,
+                ExpansionsMask,
+                BuildNumber,
+                MySqlHelper.EscapeString(ModuleName.Length > 32 ? ModuleName.Substring(0, 32) : ModuleName),
+                MySqlHelper.EscapeString(ServerName.Length > 256 ? ServerName.Substring(0, 256) : ServerName),
+                ActivePlayerCount,
+                MaximumPlayerCount,
+                LocalVault,
+                MasterServer.DateToSQLDate(LastHeartbeat),
+                MySqlHelper.EscapeString(ServerAddress.ToString()),
+                Online
+                );
+
+                MasterServer.ExecuteQueryNoReaderCombine(Query);
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWGameServer.Save(): Failed to save server {0}: Exception: {1}",
+                    ServerAddress,
+                    e);
+            }
 
         }
 
@@ -289,6 +361,36 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// Called when a server name update is available.
+        /// </summary>
+        /// <param name="ServerName">Supplies the new server name.</param>
+        public void OnServerNameUpdate(string ServerName)
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                if (this.ServerName != ServerName)
+                {
+                    LastHeartbeat = Now;
+                    this.ServerName = ServerName;
+
+                    if (!Online)
+                    {
+                        Online = true;
+                        StartHeartbeat();
+                    }
+
+                    Save();
+                }
+                else
+                {
+                    Timesave(Now);
+                }
+            }
+        }
+
+        /// <summary>
         /// Initiate an auto save if necessary.  The server is assumed to be
         /// locked.
         /// </summary>
@@ -336,7 +438,7 @@ namespace NWNMasterServer
 
             if (Expired)
             {
-                Logger.Log("NWGameServer.HeartbeatTimer_Elapsed(): Server {0} expired from online server list due to heartbeat timeout.", this);
+                Logger.Log(LogLevel.Normal, "NWGameServer.HeartbeatTimer_Elapsed(): Server {0} expired from online server list due to heartbeat timeout.", this);
                 Save();
                 return;
             }
@@ -382,6 +484,11 @@ namespace NWNMasterServer
         public string ModuleName { get; set; }
 
         /// <summary>
+        /// The name of the server (if any).
+        /// </summary>
+        public string ServerName { get; set; }
+
+        /// <summary>
         /// The count of active players on the server.
         /// </summary>
         public uint ActivePlayerCount { get; set; }
@@ -415,7 +522,7 @@ namespace NWNMasterServer
         /// The internal database ID of the server, or zero if the server has
         /// not had an ID assigned yet.
         /// </summary>
-        public int DatabaseId { get; set; }
+        public uint DatabaseId { get; set; }
 
 
         /// <summary>

@@ -18,6 +18,7 @@ using System.Linq;
 using System.Text;
 using System.Net;
 using System.Threading;
+using MySql.Data.MySqlClient;
 
 namespace NWNMasterServer
 {
@@ -37,6 +38,8 @@ namespace NWNMasterServer
         public NWServerTracker(NWMasterServer MasterServer)
         {
             this.MasterServer = MasterServer;
+
+            InitializeDatabase();
         }
 
         /// <summary>
@@ -45,6 +48,7 @@ namespace NWNMasterServer
         public void QueueInitialHeartbeats()
         {
             DateTime Now = DateTime.UtcNow;
+            uint HeartbeatsStarted = 0;
 
             lock (ActiveServerTable)
             {
@@ -61,6 +65,7 @@ namespace NWNMasterServer
                             (Now - Server.LastHeartbeat) < HeartbeatCutoffTimeSpan)
                         {
                             Server.StartHeartbeat();
+                            HeartbeatsStarted += 1;
                         }
                         else
                         {
@@ -71,6 +76,8 @@ namespace NWNMasterServer
                     }
                 }
             }
+
+            Logger.Log(LogLevel.Normal, "NWServerTracker.QueueInitialHeartbeats(): Queued {0} initial server heartbeat requests.", HeartbeatsStarted);
         }
 
         /// <summary>
@@ -113,6 +120,7 @@ namespace NWNMasterServer
             lock (HeartbeatLock)
             {
                 MasterServer.SendServerInfoRequest(Server.ServerAddress);
+                MasterServer.SendServerNameRequest(Server.ServerAddress);
             }
 
             return true;
@@ -146,6 +154,121 @@ namespace NWNMasterServer
             }
 
             return Server;
+        }
+
+        /// <summary>
+        /// Prepare the database, creating tables (if they did not already
+        /// exist).
+        /// </summary>
+        private void InitializeDatabase()
+        {
+            uint ServersAdded;
+
+            if (String.IsNullOrEmpty(MasterServer.ConnectionString))
+                return;
+
+            try
+            {
+                MasterServer.ExecuteQueryNoReader(
+@"CREATE TABLE IF NOT EXISTS `game_servers` (
+    `game_server_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `product_id` int(10) UNSIGNED NOT NULL,
+    `expansions_mask` int(10) UNSIGNED NOT NULL,
+    `build_number` int(10) UNSIGNED NOT NULL,
+    `module_name` varchar(32) NOT NULL,
+    `server_name` varchar(256) NOT NULL,
+    `active_player_count` int(10) UNSIGNED NOT NULL,
+    `maximum_player_count` int(10) UNSIGNED NOT NULL,
+    `local_vault` bool NOT NULL,
+    `last_heartbeat` datetime NOT NULL,
+    `server_address` varchar(128) NOT NULL,
+    `online` bool NOT NULL,
+    PRIMARY KEY (`game_server_id`),
+    UNIQUE KEY (`product_id`, `server_address`),
+    INDEX (`product_id`, `online`)
+    )");
+
+                string Query = String.Format(
+@"SELECT `game_server_id`,
+    `expansions_mask`,
+    `build_number`,
+    `module_name`,
+    `server_name`,
+    `active_player_count`,
+    `maximum_player_count`,
+    `local_vault`,
+    `last_heartbeat`,
+    `server_address`,
+    `online`
+FROM `game_servers`
+WHERE `product_id` = {0}
+AND `online` = true
+AND `last_heartbeat` >= '{1}'",
+                    MasterServer.ProductID,
+                    MasterServer.DateToSQLDate(DateTime.UtcNow.Subtract(HeartbeatCutoffTimeSpan)));
+
+                ServersAdded = 0;
+                using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
+                {
+                    while (Reader.Read())
+                    {
+                        uint ServerId = Reader.GetUInt32(0);
+                        string Hostname = Reader.GetString(9);
+                        int i = Hostname.IndexOf(':');
+                        IPEndPoint ServerAddress;
+
+                        if (i == -1)
+                        {
+                            Logger.Log(LogLevel.Error, "NWServerTracker.InitializeDatabase(): Server {0} has invalid hostname '{1}'.",
+                                ServerId,
+                                Hostname);
+                            continue;
+                        }
+
+                        try
+                        {
+                            ServerAddress = new IPEndPoint(
+                                IPAddress.Parse(Hostname.Substring(0, i)),
+                                Convert.ToInt32(Hostname.Substring(i + 1)));
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Log(LogLevel.Error, "NWServerTracker.InitializeDatabase(): Error initializing hostname {0} for server {1}: Exception: {2}",
+                                Hostname,
+                                ServerId,
+                                e);
+                            continue;
+                        }
+
+                        NWGameServer Server = new NWGameServer(MasterServer, ServerAddress);
+
+                        Server.DatabaseId = ServerId;
+                        Server.ExpansionsMask = (Byte)Reader.GetUInt32(1);
+                        Server.BuildNumber = (UInt16)Reader.GetUInt32(2);
+                        Server.ModuleName = Reader.GetString(3);
+                        Server.ServerName = Reader.GetString(4);
+                        Server.ActivePlayerCount = Reader.GetUInt32(5);
+                        Server.MaximumPlayerCount = Reader.GetUInt32(6);
+                        Server.LocalVault = Reader.GetBoolean(7);
+                        Server.LastHeartbeat = Reader.GetDateTime(8);
+                        Server.Online = Reader.GetBoolean(10);
+
+                        lock (ActiveServerTable)
+                        {
+                            ActiveServerTable.Add(ServerAddress, Server);
+                        }
+
+                        ServersAdded += 1;
+                    }
+                }
+
+                Logger.Log(LogLevel.Normal, "NWServerTracker.InitializeDatabase(): Read {0} active servers from database.", ServersAdded);
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWServerTracker.InitializeDatabase(): Exception: {0}", e);
+                MasterServer.Stop();
+            }
         }
 
         /// <summary>

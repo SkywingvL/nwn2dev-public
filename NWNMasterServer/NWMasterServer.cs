@@ -22,8 +22,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Timers;
 using NWN;
 using NWN.Parsers;
+using MySql.Data.MySqlClient;
 
 namespace NWNMasterServer
 {
@@ -39,6 +41,10 @@ namespace NWNMasterServer
         public NWMasterServer(ServiceController ServiceObject)
         {
             this.ServiceObject = ServiceObject;
+            QueryCombineTimer = new System.Timers.Timer(QUERY_COMBINE_INTERVAL);
+
+            QueryCombineTimer.AutoReset = false;
+            QueryCombineTimer.Elapsed += new ElapsedEventHandler(QueryCombineTimer_Elapsed);
         }
 
         /// <summary>
@@ -52,6 +58,13 @@ namespace NWNMasterServer
 
             if (!String.IsNullOrEmpty(ServerSettings.Default.LogFileName))
                 Logger.OpenLogFile(ServerSettings.Default.LogFileName);
+
+            //
+            // Set the log filter level.
+            //
+
+            Logger.LogFilterLevel = (LogLevel)Enum.Parse(typeof(LogLevel),
+                ServerSettings.Default.LogLevel);
 
             try
             {
@@ -87,7 +100,7 @@ namespace NWNMasterServer
 
                 ServerTracker.QueueInitialHeartbeats();
 
-                Logger.Log("NWMasterServer.Run(): Master server version {0} initialized (game build advertised: {1}).",
+                Logger.Log(LogLevel.Normal, "NWMasterServer.Run(): Master server version {0} initialized (game build advertised: {1}).",
                     Assembly.GetExecutingAssembly().GetName().Version,
                     BuildNumber);
 
@@ -119,10 +132,23 @@ namespace NWNMasterServer
                     if (PendingBuffers == 0)
                         break;
                 }
+
+                //
+                // Finally, flush any lingering pending queries.
+                //
+
+                lock (QueryCombineBuffer)
+                {
+                    if (QueryCombineBuffer.Length != 0)
+                    {
+                        ExecuteQueryNoReader(QueryCombineBuffer.ToString());
+                        QueryCombineBuffer.Clear();
+                    }
+                }
             }
             catch (Exception e)
             {
-                Logger.Log("NWMasterServer.Run(): Exception: {0}", e);
+                Logger.Log(LogLevel.Error, "NWMasterServer.Run(): Exception: {0}", e);
             }
         }
 
@@ -133,6 +159,136 @@ namespace NWNMasterServer
         {
             QuitRequested = true;
             QuitEvent.Set();
+        }
+
+        /// <summary>
+        /// Execute a query.
+        /// </summary>
+        /// <param name="Query">Supplies the query to execute.</param>
+        /// <returns>A reader for the query results is returned.</returns>
+        public MySqlDataReader ExecuteQuery(string Query)
+        {
+            try
+            {
+                return MySqlHelper.ExecuteReader(ConnectionString, Query);
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWMasterServer.ExecuteQueryNoReader(): Exception in query '{0}': '{1}'.",
+                    Query,
+                    e);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Execute a query that returns nothing.
+        /// </summary>
+        /// <param name="Query">Supplies the query to execute.</param>
+        public void ExecuteQueryNoReader(string Query)
+        {
+            try
+            {
+                MySqlHelper.ExecuteNonQuery(ConnectionString, Query);
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWMasterServer.ExecuteQueryNoReader(): Exception in query '{0}': '{1}'.",
+                    Query,
+                    e);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Convert a DateTime to MySQL-compatible format.
+        /// </summary>
+        /// <param name="Date">The date to convert.</param>
+        /// <returns>The MySQL-compatible date string.</returns>
+        public string DateToSQLDate(DateTime Date)
+        {
+            return String.Format("{0:D4}-{1:D2}-{2:D2} {3:D2}:{4:D2}:{5:D2}",
+                Date.Year,
+                Date.Month,
+                Date.Day,
+                Date.Hour,
+                Date.Minute,
+                Date.Second);
+        }
+
+        /// <summary>
+        /// Execute a query that returns nothing, allowing the query to be held
+        /// for query combining.
+        /// </summary>
+        /// <param name="Query">Supplies the query to execute.</param>
+        public void ExecuteQueryNoReaderCombine(string Query)
+        {
+            string DirectQuery = null;
+
+            try
+            {
+                bool StartTimer = false;
+
+                //
+                // Attempt to perform query combining.  If the maximum limit is
+                // reached, flush the queue directly.  If this was the first
+                // query being pushed on to the queue, set the timer.
+                //
+
+                lock (QueryCombineBuffer)
+                {
+                    int OldLength = QueryCombineBuffer.Length;
+
+                    QueryCombineBuffer.Append(Query);
+                    QueryCombineBuffer.Append(";");
+
+                    if (QueryCombineBuffer.Length > QUERY_COMBINE_LENGTH)
+                    {
+                        DirectQuery = QueryCombineBuffer.ToString();
+                        QueryCombineBuffer.Clear();
+                    }
+                    else if (OldLength == 0)
+                    {
+                        StartTimer = true;
+                    }
+                }
+
+                if (StartTimer)
+                    QueryCombineTimer.Start();
+
+                if (DirectQuery != null)
+                    MySqlHelper.ExecuteNonQuery(ConnectionString, Query);
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWMasterServer.ExecuteQueryNoReaderCombine(): Exception in query '{0}': '{1}'.",
+                    String.IsNullOrEmpty(DirectQuery) ? Query : DirectQuery,
+                    e);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// This timer callback runs when the query combine timer elapses.  It
+        /// checks whether there is a pending query queue, and if so, flushes
+        /// it as appropriate.
+        /// </summary>
+        /// <param name="sender">Unused.</param>
+        /// <param name="e">Unused.</param>
+        private void QueryCombineTimer_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            string DirectQuery;
+
+            lock (QueryCombineBuffer)
+            {
+                if (QueryCombineBuffer.Length == 0)
+                    return;
+
+                DirectQuery = QueryCombineBuffer.ToString();
+                QueryCombineBuffer.Clear();
+            }
+
+            ExecuteQueryNoReader(DirectQuery);
         }
 
         /// <summary>
@@ -188,7 +344,7 @@ namespace NWNMasterServer
             catch (Exception e)
             {
                 PendingBuffers -= 1;
-                Logger.Log("NWMasterServer.InitiateReceive(): BeginReceiveFrom failed: Exception: {0}", e);
+                Logger.Log(LogLevel.Error, "NWMasterServer.InitiateReceive(): BeginReceiveFrom failed: Exception: {0}", e);
                 Stop();
                 return;
             }
@@ -221,7 +377,7 @@ namespace NWNMasterServer
                     }
                     else
                     {
-                        Logger.Log("NWMasterServer.RecvCompletionCallback(): Unexpected receive error: {0} (Exception: {1})",
+                        Logger.Log(LogLevel.Error, "NWMasterServer.RecvCompletionCallback(): Unexpected receive error: {0} (Exception: {1})",
                             e.SocketErrorCode,
                             e);
                     }
@@ -230,7 +386,7 @@ namespace NWNMasterServer
                 {
                     RecvLen = -1;
 
-                    Logger.Log("NWMasterServer.RecvCompletionCallback(): EndReceiveFrom failed: Exception: {0}", e);
+                    Logger.Log(LogLevel.Error, "NWMasterServer.RecvCompletionCallback(): EndReceiveFrom failed: Exception: {0}", e);
                 }
             }
             else
@@ -247,7 +403,7 @@ namespace NWNMasterServer
             }
             catch (Exception e)
             {
-                Logger.Log("NWMasterServer.RecvCompletionCallback(): Exception: {0}", e);
+                Logger.Log(LogLevel.Error, "NWMasterServer.RecvCompletionCallback(): Exception: {0}", e);
             }
 
             PendingBuffers -= 1;
@@ -266,14 +422,14 @@ namespace NWNMasterServer
             }
             catch (SocketException e)
             {
-                Logger.Log("NWMasterServer.SendCompletionCallback(): Unexpected receive error for host {0}: {1} (Exception: {2})",
+                Logger.Log(LogLevel.Error, "NWMasterServer.SendCompletionCallback(): Unexpected receive error for host {0}: {1} (Exception: {2})",
                     Recipient,
                     e.SocketErrorCode,
                     e);
             }
             catch (Exception e)
             {
-                Logger.Log("NWMasterServer.SendCompletionCallback(): Exception: {0}", e);
+                Logger.Log(LogLevel.Error, "NWMasterServer.SendCompletionCallback(): Exception: {0}", e);
             }
         }
 
@@ -361,6 +517,10 @@ namespace NWNMasterServer
 
                 case (uint)ConnAuthCmd.ServerInfoResponse:
                     OnRecvServerInfoResponse(ParseBuffer, Sender);
+                    break;
+
+                case (uint)ConnAuthCmd.ServerNameResponse:
+                    OnRecvServerNameResponse(ParseBuffer, Sender);
                     break;
 
             }
@@ -496,6 +656,7 @@ namespace NWNMasterServer
 
             Server.RecordActivity();
             SendServerInfoRequest(Sender);
+            SendServerNameRequest(Sender);
         }
 
         /// <summary>
@@ -536,7 +697,7 @@ namespace NWNMasterServer
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
             Server.OnHeartbeat((uint)PlayerCDKeyList.Count);
 
-            Logger.Log("NWMasterServer.OnRecvMstHeartbeat(): Server {0} ActivePlayerCount={1}.", Sender, PlayerCDKeyList.Count);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstHeartbeat(): Server {0} ActivePlayerCount={1}.", Sender, PlayerCDKeyList.Count);
         }
 
         /// <summary>
@@ -574,7 +735,7 @@ namespace NWNMasterServer
                 //
 
                 Server.OnShutdownNotify();
-                Logger.Log("NWMasterServer.OnRecvMstShutdownNotify(): Server {0} shut down.", Sender);
+                Logger.Log(LogLevel.Normal, "NWMasterServer.OnRecvMstShutdownNotify(): Server {0} shut down.", Sender);
                 return;
             }
             else if (EntryCount != 1)
@@ -606,7 +767,8 @@ namespace NWNMasterServer
 
             Server.RecordActivity();
             SendServerInfoRequest(Sender);
-            Logger.Log("NWMasterServer.OnRecvMstDisconnectNotify()");
+            SendServerNameRequest(Sender);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstDisconnectNotify()");
         }
 
         /// <summary>
@@ -647,7 +809,7 @@ namespace NWNMasterServer
             //
 
             Server.OnStartupNotify(Platform, BuildNumber);
-            Logger.Log("NWMasterServer.OnRecvMstStartupNotify(): Server {0} Platform={1} BuildNumber={2}.", Sender, (char)Platform, BuildNumber);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstStartupNotify(): Server {0} Platform={1} BuildNumber={2}.", Sender, (char)Platform, BuildNumber);
         }
 
         /// <summary>
@@ -674,8 +836,9 @@ namespace NWNMasterServer
 
             Server.OnModuleLoad(ExpansionsMask, ModuleName);
             SendServerInfoRequest(Sender);
+            SendServerNameRequest(Sender);
 
-            Logger.Log("NWMasterServer.OnRecvMstModuleLoadNotify(): Server {0} ModuleName={1} ExpansionsMask={2}.", Sender, ModuleName, ExpansionsMask);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstModuleLoadNotify(): Server {0} ModuleName={1} ExpansionsMask={2}.", Sender, ModuleName, ExpansionsMask);
         }
 
         /// <summary>
@@ -839,9 +1002,42 @@ namespace NWNMasterServer
 
             Server.OnServerInfoUpdate(Info);
 
-            Logger.Log("NWMasterServer.OnRecvServerInfoResponse(): Server {0} has {1}/{2} players ({3}).", Sender, Info.ActivePlayers, Info.MaximumPlayers,
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerInfoResponse(): Server {0} has {1}/{2} players ({3}).", Sender, Info.ActivePlayers, Info.MaximumPlayers,
                  Info.ModuleName);
         }
+
+        /// <summary>
+        /// This method parses a server name response from a game server.
+        /// </summary>
+        /// <param name="Parser">Supplies the message parser context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvServerNameResponse(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            Byte UpdateType;
+            UInt16 DataPort;
+            Byte RequestCorrelationCookie;
+            string ServerName;
+
+            if (!Parser.ReadBYTE(out UpdateType))
+                return;
+            if (UpdateType != 'U')
+                return;
+            if (!Parser.ReadWORD(out DataPort))
+                return;
+            if (!Parser.ReadBYTE(out RequestCorrelationCookie))
+                return;
+            if (RequestCorrelationCookie != 0)
+                return;
+            if (!Parser.ReadSmallString(out ServerName))
+                return;
+
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            Server.OnServerNameUpdate(ServerName);
+
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerNameResponse(): Server {0} name is {1}.", Sender, ServerName);
+        }
+
 
         /// <summary>
         /// This method sends a community account authorization response to a
@@ -859,7 +1055,7 @@ namespace NWNMasterServer
             Builder.WriteSmallString(AccountName, 16);
             Builder.WriteWORD((ushort)Status);
 
-            Logger.Log("NWMasterServer.SendMstCommunityAccountAuthorization(): Authorizing account {0} for server {1} with status {2}.", AccountName, Address, Status);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstCommunityAccountAuthorization(): Authorizing account {0} for server {1} with status {2}.", AccountName, Address, Status);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -884,7 +1080,7 @@ namespace NWNMasterServer
                 Builder.WriteWORD(CDKey.Product);
             }
 
-            Logger.Log("NWMasterServer.SendMstCDKeyAuthorization(): Authorizing {0} CD-Keys for server {1}.", CDKeys, Address);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstCDKeyAuthorization(): Authorizing {0} CD-Keys for server {1}.", CDKeys, Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -901,7 +1097,7 @@ namespace NWNMasterServer
 
             Builder.WriteDWORD((uint)MstCmd.DemandHeartbeat);
 
-            Logger.Log("NWMasterServer.SendMstDemandHeartbeat(): Requesting heartbeat for server {0}.", Address);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstDemandHeartbeat(): Requesting heartbeat for server {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -919,7 +1115,7 @@ namespace NWNMasterServer
             Builder.WriteDWORD((uint)MstCmd.MOTDResponse);
             Builder.WriteSmallString(Message, 16);
 
-            Logger.Log("NWMasterServer.SendMstMOTD(): Sending MOTD to {0}.", Address);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstMOTD(): Sending MOTD to {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -937,7 +1133,7 @@ namespace NWNMasterServer
             Builder.WriteDWORD((uint)MstCmd.VersionResponse);
             Builder.WriteSmallString(BuildNumber, 16);
 
-            Logger.Log("NWMasterServer.SendMstVersion(): Sending version to {0}.", Address);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstVersion(): Sending version to {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -956,7 +1152,7 @@ namespace NWNMasterServer
             Builder.WriteDWORD((uint)MstCmd.StatusResponse);
             Builder.WriteDWORD((ushort)StatusFlags);
 
-            Logger.Log("NWMasterServer.SendMstStatusResponse(): Sending status response to {0}.", Address);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstStatusResponse(): Sending status response to {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
@@ -972,10 +1168,28 @@ namespace NWNMasterServer
             Builder.WriteDWORD((uint)ConnAuthCmd.ServerInfoRequest);
             Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
 
-            Logger.Log("NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
 
             SendRawDataToMstClient(Address, Builder);
         }
+
+        /// <summary>
+        /// This method sends a server name request to a server.
+        /// </summary>
+        /// <param name="Address">Supplies the game server address.</param>
+        public void SendServerNameRequest(IPEndPoint Address)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)ConnAuthCmd.ServerNameRequest);
+            Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
+            Builder.WriteBYTE(0); // Request correlation cookie.
+
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerNameRequest(): Sending server name request to {0}.", Address);
+
+            SendRawDataToMstClient(Address, Builder);
+        }
+
 
         /// <summary>
         /// This method transmits a raw datagram to a master server client,
@@ -1047,28 +1261,9 @@ namespace NWNMasterServer
                 }
                 catch (Exception e)
                 {
-                    Logger.Log("NWMasterServer.SendRawDataToMstClient(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
+                    Logger.Log(LogLevel.Error, "NWMasterServer.SendRawDataToMstClient(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
                 }
             }
-        }
-
-        /// <summary>
-        /// This method marks a game server as still alive (because a message
-        /// was received).
-        /// </summary>
-        /// <param name="Sender">Supplies the game server address.</param>
-        private void RecordGameServerActivity(IPEndPoint Sender)
-        {
-            Logger.Log("NWMasterServer.RecordGameServerActivity(): Server active: {0}", Sender);
-        }
-
-        /// <summary>
-        /// This method marks a game server as shut down.
-        /// </summary>
-        /// <param name="Sender">Supplies the game server address.</param>
-        private void RecordGameServerShutdown(IPEndPoint Sender)
-        {
-            Logger.Log("NWMasterServer.RecordGameServerActivity(): Server shutdown: {0}", Sender);
         }
 
         /// <summary>
@@ -1121,13 +1316,15 @@ namespace NWNMasterServer
             // Client to server requests.
             //
 
-            ServerInfoRequest = 0x49584e42,
+            ServerInfoRequest = 0x49584e42, // BNXI
+            ServerNameRequest = 0x53454e42, // BNES
 
             //
             // Server to client requests.
             //
 
-            ServerInfoResponse = 0x52584e42,
+            ServerInfoResponse = 0x52584e42, // BNXR
+            ServerNameResponse = 0x52454e42, // BNER
         }
 
         /// <summary>
@@ -1225,6 +1422,28 @@ namespace NWNMasterServer
         private const int MAX_FRAME_SIZE = 1472;
 
         /// <summary>
+        /// The amount of time, in milliseconds, that queries should be held
+        /// for combining.
+        /// </summary>
+        private const int QUERY_COMBINE_INTERVAL = 60000;
+
+        /// <summary>
+        /// The maximum length of a queued query string that is being held for
+        /// combining, in characters.
+        /// </summary>
+        private const int QUERY_COMBINE_LENGTH = 256 * 1024;
+
+        /// <summary>
+        /// The combine buffer for query management.
+        /// </summary>
+        private StringBuilder QueryCombineBuffer = new StringBuilder();
+
+        /// <summary>
+        /// The timer for managing query combining.
+        /// </summary>
+        private System.Timers.Timer QueryCombineTimer = null;
+
+        /// <summary>
         /// Receive buffers available to pull data into from the network.
         /// </summary>
         private RecvBuffer[] Buffers = new RecvBuffer[BUFFER_COUNT];
@@ -1261,8 +1480,33 @@ namespace NWNMasterServer
         private string MOTD = ServerSettings.Default.MOTD;
 
         /// <summary>
+        /// The connection string for the database.
+        /// </summary>
+        private string DatabaseConnectionString = ServerSettings.Default.DatabaseConnectionString;
+
+        /// <summary>
+        /// The product ID for the game_servers table.
+        /// </summary>
+        private uint ServerProductID = ServerSettings.Default.ProductID;
+
+        /// <summary>
+        /// Timekeeping for query combining.
+        /// </summary>
+        private uint LastQueryTick = (uint)Environment.TickCount - QUERY_COMBINE_INTERVAL;
+
+        /// <summary>
         /// Return the server tracker object for external users.
         /// </summary>
-        public NWServerTracker Tracker { get { return ServerTracker;  } }
+        public NWServerTracker Tracker { get { return ServerTracker; } }
+
+        /// <summary>
+        /// Return the database connection string.
+        /// </summary>
+        public string ConnectionString { get { return DatabaseConnectionString; } }
+
+        /// <summary>
+        /// Return the product ID for the game_servers table.
+        /// </summary>
+        public uint ProductID { get { return ServerProductID; } }
     }
 }
