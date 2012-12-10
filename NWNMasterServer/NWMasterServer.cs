@@ -359,6 +359,10 @@ namespace NWNMasterServer
                     OnRecvMstStatusRequest(ParseBuffer, Sender);
                     break;
 
+                case (uint)ConnAuthCmd.ServerInfoResponse:
+                    OnRecvServerInfoResponse(ParseBuffer, Sender);
+                    break;
+
             }
         }
 
