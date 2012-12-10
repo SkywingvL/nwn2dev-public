@@ -186,7 +186,8 @@ namespace NWNMasterServer
     `private_server` bool NOT NULL,
     PRIMARY KEY (`game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`),
-    INDEX (`product_id`, `online`)
+    INDEX (`product_id`, `online`),
+    INDEX (`product_id`, `online`, `server_name`)
     )");
 
                 string Query = String.Format(
