@@ -18,18 +18,21 @@ using System.Linq;
 using System.Web;
 using System.Configuration;
 
-/// <summary>
-/// This class define database configuration settings.
-/// </summary>
-public class DatabaseSettings : ConfigurationSection
+namespace NWN
 {
     /// <summary>
-    /// The MySQL connection string.
+    /// This class define database configuration settings.
     /// </summary>
-    [ConfigurationProperty("ConnectionString", IsRequired = true)]
-    public string ConnectionString
+    public class DatabaseSettings : ConfigurationSection
     {
-        get { return (string)this["ConnectionString"]; }
-        set { this["ConnectionString"] = value; }
+        /// <summary>
+        /// The MySQL connection string.
+        /// </summary>
+        [ConfigurationProperty("ConnectionString", IsRequired = true)]
+        public string ConnectionString
+        {
+            get { return (string)this["ConnectionString"]; }
+            set { this["ConnectionString"] = value; }
+        }
     }
 }
