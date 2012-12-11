@@ -80,6 +80,7 @@ namespace NWN
                     Server.ServerAddress = Reader.GetString(9);
                     Server.Online = Reader.GetBoolean(10);
                     Server.PrivateServer = Reader.GetBoolean(11);
+                    Server.Product = Product;
 
                     Servers.Add(Server);
                 }
@@ -135,6 +136,7 @@ namespace NWN
                     Server.ServerAddress = Reader.GetString(9);
                     Server.Online = Reader.GetBoolean(10);
                     Server.PrivateServer = Reader.GetBoolean(11);
+                    Server.Product = Product;
 
                     return Server;
                 }
@@ -189,6 +191,7 @@ namespace NWN
                     Server.ServerAddress = Reader.GetString(9);
                     Server.Online = Reader.GetBoolean(10);
                     Server.PrivateServer = Reader.GetBoolean(11);
+                    Server.Product = Product;
 
                     Servers.Add(Server);
                 }
