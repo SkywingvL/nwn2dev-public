@@ -167,10 +167,8 @@ AND `server_address` = '{1}'",
                     BuildNumber = (UInt16)Reader.GetUInt32(2);
                     ModuleName = Reader.GetString(3);
                     ServerName = Reader.GetString(4);
-                    ActivePlayerCount = Reader.GetUInt32(5);
                     MaximumPlayerCount = Reader.GetUInt32(6);
                     LocalVault = Reader.GetBoolean(7);
-                    LastHeartbeat = Reader.GetDateTime(8);
                     PrivateServer = Reader.GetBoolean(11);
                 }
             }
