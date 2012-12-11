@@ -125,8 +125,61 @@ ON DUPLICATE KEY UPDATE
                     ServerAddress,
                     e);
             }
-
         }
+
+        /// <summary>
+        /// Attempt to load data from the database.  The server is assumed to
+        /// be either locked or not yet published.
+        /// </summary>
+        public void Load()
+        {
+            string Query = String.Format(
+@"SELECT `game_server_id`,
+    `expansions_mask`,
+    `build_number`,
+    `module_name`,
+    `server_name`,
+    `active_player_count`,
+    `maximum_player_count`,
+    `local_vault`,
+    `last_heartbeat`,
+    `server_address`,
+    `online`,
+    `private_server`
+FROM `game_servers`
+WHERE `product_id` = {0}
+AND `server_address` = '{1}'",
+                MasterServer.ProductID,
+                MySqlHelper.EscapeString(ServerAddress.ToString()));
+
+            try
+            {
+                using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
+                {
+                    if (!Reader.Read())
+                        return;
+
+                    DatabaseId = Reader.GetUInt32(0);
+
+                    NWGameServer Server = new NWGameServer(MasterServer, ServerAddress);
+
+                    ExpansionsMask = (Byte)Reader.GetUInt32(1);
+                    BuildNumber = (UInt16)Reader.GetUInt32(2);
+                    ModuleName = Reader.GetString(3);
+                    ServerName = Reader.GetString(4);
+                    ActivePlayerCount = Reader.GetUInt32(5);
+                    MaximumPlayerCount = Reader.GetUInt32(6);
+                    LocalVault = Reader.GetBoolean(7);
+                    LastHeartbeat = Reader.GetDateTime(8);
+                    PrivateServer = Reader.GetBoolean(11);
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWMasterServer.Load(): Failed to load server {0}: Exception: {1}", ServerAddress, e);
+            }
+        }
+
 
         /// <summary>
         /// Start the periodic heartbeat, if it is not already running.  The

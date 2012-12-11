@@ -328,9 +328,10 @@ namespace NWNMasterServer
                 return;
             }
 
+            IncrementPendingBuffers();
+
             try
             {
-                PendingBuffers += 1;
                 EndPoint RecvEndPoint = (EndPoint)Buffer.Sender;
                 IAsyncResult Result = ServerSocket.BeginReceiveFrom(
                     Buffer.Buffer,
@@ -343,7 +344,8 @@ namespace NWNMasterServer
             }
             catch (Exception e)
             {
-                PendingBuffers -= 1;
+                DecrementPendingBuffers();
+
                 Logger.Log(LogLevel.Error, "NWMasterServer.InitiateReceive(): BeginReceiveFrom failed: Exception: {0}", e);
                 Stop();
                 return;
@@ -406,7 +408,7 @@ namespace NWNMasterServer
                 Logger.Log(LogLevel.Error, "NWMasterServer.RecvCompletionCallback(): Exception: {0}", e);
             }
 
-            PendingBuffers -= 1;
+            DecrementPendingBuffers();
 
             InitiateReceive(Buffer);
         }
@@ -1265,6 +1267,27 @@ namespace NWNMasterServer
                 }
             }
         }
+
+#pragma warning disable 420 // a reference to a volatile field will not be treated as volatile
+
+        /// <summary>
+        /// Increment the pending buffer count.
+        /// </summary>
+        private void IncrementPendingBuffers()
+        {
+            Interlocked.Increment(ref PendingBuffers);
+        }
+
+        /// <summary>
+        /// Decrement the pending buffer count.
+        /// </summary>
+        private void DecrementPendingBuffers()
+        {
+            Interlocked.Decrement(ref PendingBuffers);
+        }
+
+#pragma warning restore 420
+
 
         /// <summary>
         /// A receive buffer that can contain data for a single datagram sent

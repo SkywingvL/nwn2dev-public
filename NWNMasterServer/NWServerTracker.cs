@@ -149,6 +149,7 @@ namespace NWNMasterServer
                 if ((Create != false) && (Server == null))
                 {
                     Server = new NWGameServer(MasterServer, ServerAddress);
+                    Server.Load();
                     ActiveServerTable.Add(ServerAddress, Server);
                 }
             }
@@ -205,10 +206,8 @@ namespace NWNMasterServer
     `private_server`
 FROM `game_servers`
 WHERE `product_id` = {0}
-AND `online` = true
-AND `last_heartbeat` >= '{1}'",
-                    MasterServer.ProductID,
-                    MasterServer.DateToSQLDate(DateTime.UtcNow.Subtract(HeartbeatCutoffTimeSpan)));
+AND `online` = true",
+                    MasterServer.ProductID);
 
                 ServersAdded = 0;
                 using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
