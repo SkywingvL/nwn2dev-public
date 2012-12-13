@@ -119,8 +119,7 @@ namespace NWNMasterServer
 
             lock (HeartbeatLock)
             {
-                MasterServer.SendServerInfoRequest(Server.ServerAddress);
-                MasterServer.SendServerNameRequest(Server.ServerAddress);
+                MasterServer.RefreshServerStatus(Server.ServerAddress);
             }
 
             return true;
@@ -185,6 +184,9 @@ namespace NWNMasterServer
     `server_address` varchar(128) NOT NULL,
     `online` bool NOT NULL,
     `private_server` bool NOT NULL,
+    `module_description` varchar(256) NOT NULL,
+    `module_url` varchar(256) NOT NULL,
+    `game_type` int(10) UNSIGNED NOT NULL,
     PRIMARY KEY (`game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`),
     INDEX (`product_id`, `online`),
@@ -203,7 +205,10 @@ namespace NWNMasterServer
     `last_heartbeat`,
     `server_address`,
     `online`,
-    `private_server`
+    `private_server`,
+    `module_description`,
+    `module_url`,
+    `game_type`
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `online` = true",

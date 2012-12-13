@@ -525,6 +525,10 @@ namespace NWNMasterServer
                     OnRecvServerNameResponse(ParseBuffer, Sender);
                     break;
 
+                case (uint)ConnAuthCmd.ServerDescriptionResponse:
+                    OnRecvServerDescriptionResponse(ParseBuffer, Sender);
+                    break;
+
             }
         }
 
@@ -657,8 +661,7 @@ namespace NWNMasterServer
             //
 
             Server.RecordActivity();
-            SendServerInfoRequest(Sender);
-            SendServerNameRequest(Sender);
+            RefreshServerStatus(Sender);
         }
 
         /// <summary>
@@ -768,8 +771,7 @@ namespace NWNMasterServer
             //
 
             Server.RecordActivity();
-            SendServerInfoRequest(Sender);
-            SendServerNameRequest(Sender);
+            RefreshServerStatus(Sender);
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstDisconnectNotify()");
         }
 
@@ -837,8 +839,7 @@ namespace NWNMasterServer
             //
 
             Server.OnModuleLoad(ExpansionsMask, ModuleName);
-            SendServerInfoRequest(Sender);
-            SendServerNameRequest(Sender);
+            RefreshServerStatus(Sender);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstModuleLoadNotify(): Server {0} ModuleName={1} ExpansionsMask={2}.", Sender, ModuleName, ExpansionsMask);
         }
@@ -1040,6 +1041,46 @@ namespace NWNMasterServer
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerNameResponse(): Server {0} name is {1}.", Sender, ServerName);
         }
 
+        /// <summary>
+        /// This method parses a server name response from a game server.
+        /// </summary>
+        /// <param name="Parser">Supplies the message parser context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvServerDescriptionResponse(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            UInt16 DataPort;
+            string GameDetails;
+            string ModuleDescription;
+            string BuildNumber;
+            UInt16 GameType;
+            string ModuleUrl;
+            string PWCUrl;
+
+            if (!Parser.ReadWORD(out DataPort))
+                return;
+            if (!Parser.ReadSmallString(out GameDetails, 32))
+                return;
+            if (!Parser.ReadSmallString(out ModuleDescription, 32))
+                return;
+            if (!Parser.ReadSmallString(out BuildNumber, 32))
+                return;
+            if (!Parser.ReadWORD(out GameType))
+                return;
+            if (!Parser.ReadSmallString(out ModuleUrl, 32))
+                return;
+            if (!Parser.ReadSmallString(out PWCUrl, 32))
+                return;
+
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType);
+
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{0}' URL '{1}' has game type {2}.",
+                ModuleDescription,
+                ModuleUrl,
+                GameType);
+        }
+
 
         /// <summary>
         /// This method sends a community account authorization response to a
@@ -1192,6 +1233,34 @@ namespace NWNMasterServer
             SendRawDataToMstClient(Address, Builder);
         }
 
+        /// <summary>
+        /// This method sends a server description request to a server.
+        /// </summary>
+        /// <param name="Address">Supplies the game server address.</param>
+        public void SendServerDescriptionRequest(IPEndPoint Address)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteDWORD((uint)ConnAuthCmd.ServerDescriptionRequest);
+            Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
+
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerDescriptionRequest(): Sending server description request to {0}.", Address);
+        }
+
+
+        /// <summary>
+        /// This method sends status requests to a server to refresh server
+        /// status information.
+        /// </summary>
+        /// <param name="Address">Supplies the server address.</param>
+        public void RefreshServerStatus(IPEndPoint Address)
+        {
+            SendServerInfoRequest(Address);
+            SendServerNameRequest(Address);
+            SendServerDescriptionRequest(Address);
+        }
+
+
 
         /// <summary>
         /// This method transmits a raw datagram to a master server client,
@@ -1341,6 +1410,7 @@ namespace NWNMasterServer
 
             ServerInfoRequest = 0x49584e42, // BNXI
             ServerNameRequest = 0x53454e42, // BNES
+            ServerDescriptionRequest = 0x53444e42, // BNDS
 
             //
             // Server to client requests.
@@ -1348,6 +1418,7 @@ namespace NWNMasterServer
 
             ServerInfoResponse = 0x52584e42, // BNXR
             ServerNameResponse = 0x52454e42, // BNER
+            ServerDescriptionResponse = 0x52444e42, // BNDR
         }
 
         /// <summary>

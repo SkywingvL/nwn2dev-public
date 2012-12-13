@@ -61,6 +61,12 @@ namespace NWNMasterServer
                 if (ServerName == null)
                     ServerName = "";
 
+                if (ModuleDescription == null)
+                    ModuleDescription = "";
+
+                if (ModuleUrl == null)
+                    ModuleUrl = "";
+
                 string Query = String.Format(
 @"INSERT INTO `game_servers` (
     `game_server_id`,
@@ -75,7 +81,10 @@ namespace NWNMasterServer
     `last_heartbeat`,
     `server_address`,
     `online`,
-    `private_server`)
+    `private_server`,
+    `module_description`,
+    `module_url`,
+    `game_type`)
 VALUES (
     {0},
     {1},
@@ -89,7 +98,10 @@ VALUES (
     '{9}',
     '{10}',
     {11},
-    {12})
+    {12},
+    '{13}',
+    '{14}',
+    {15})
 ON DUPLICATE KEY UPDATE 
     `expansions_mask` = {2},
     `build_number` = {3},
@@ -101,7 +113,10 @@ ON DUPLICATE KEY UPDATE
     `last_heartbeat` = '{9}',
     `server_address` = '{10}',
     `online` = {11},
-    `private_server` = {12}",
+    `private_server` = {12},
+    `module_description` = '{13}',
+    `module_url` = '{14}',
+    `game_type` = {15}",
                 DatabaseId,
                 MasterServer.ProductID,
                 ExpansionsMask,
@@ -114,10 +129,15 @@ ON DUPLICATE KEY UPDATE
                 MasterServer.DateToSQLDate(LastHeartbeat),
                 MySqlHelper.EscapeString(ServerAddress.ToString()),
                 Online,
-                PrivateServer
+                PrivateServer,
+                MySqlHelper.EscapeString(ModuleDescription.Length > 256 ? ModuleDescription.Substring(0, 256) : ModuleDescription),
+                MySqlHelper.EscapeString(ModuleUrl.Length > 256 ? ModuleUrl.Substring(0, 256) : ModuleUrl),
+                GameType
                 );
 
                 MasterServer.ExecuteQueryNoReaderCombine(Query);
+
+                LastSaveTick = (uint)Environment.TickCount;
             }
             catch (Exception e)
             {
@@ -145,7 +165,10 @@ ON DUPLICATE KEY UPDATE
     `last_heartbeat`,
     `server_address`,
     `online`,
-    `private_server`
+    `private_server`,
+    `module_description`,
+    `module_url`,
+    `game_type`
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `server_address` = '{1}'",
@@ -170,6 +193,9 @@ AND `server_address` = '{1}'",
                     MaximumPlayerCount = Reader.GetUInt32(6);
                     LocalVault = Reader.GetBoolean(7);
                     PrivateServer = Reader.GetBoolean(11);
+                    ModuleDescription = Reader.GetString(12);
+                    ModuleUrl = Reader.GetString(13);
+                    GameType = Reader.GetUInt32(14);
                 }
             }
             catch (Exception e)
@@ -220,6 +246,8 @@ AND `server_address` = '{1}'",
 
             lock (this)
             {
+                LastHeartbeat = Now;
+
                 //
                 // If it has been an extended duration since the last save event,
                 // then save the server to the database so that it is persisted as
@@ -229,12 +257,11 @@ AND `server_address` = '{1}'",
 
                 if (Online)
                 {
-                    Timesave(Now);
+                    Timesave();
                 }
                 else
                 {
                     Online = true;
-                    LastHeartbeat = Now;
                     StartHeartbeat();
                     Save();
                 }
@@ -262,23 +289,23 @@ AND `server_address` = '{1}'",
                 // save of the last heartbeat timer (if necessary).
                 //
 
+                LastHeartbeat = Now;
+
                 if (!Online)
                 {
                     Online = true;
                     ActivePlayerCount = PlayerCount;
-                    LastHeartbeat = Now;
                     StartHeartbeat();
                     Save();
                 }
                 else if (ActivePlayerCount != PlayerCount)
                 {
                     ActivePlayerCount = PlayerCount;
-                    LastHeartbeat = Now;
                     Save();
                 }
                 else
                 {
-                    Timesave(Now);
+                    Timesave();
                 }
             }
         }
@@ -315,11 +342,12 @@ AND `server_address` = '{1}'",
 
             lock (this)
             {
+                LastHeartbeat = Now;
+
                 if ((this.Platform != Platform) ||
                     (this.BuildNumber != BuildNumber) ||
                     (Online == false))
                 {
-                    LastHeartbeat = Now;
                     this.Platform = Platform;
                     this.BuildNumber = BuildNumber;
                     ActivePlayerCount = 0;
@@ -334,7 +362,7 @@ AND `server_address` = '{1}'",
                 }
                 else
                 {
-                    Timesave(Now);
+                    Timesave();
                 }
             }
         }
@@ -351,11 +379,12 @@ AND `server_address` = '{1}'",
 
             lock (this)
             {
+                LastHeartbeat = Now;
+
                 if ((this.ExpansionsMask != ExpansionsMask) ||
                     (this.ModuleName != ModuleName) ||
                     (Online == false))
                 {
-                    LastHeartbeat = Now;
                     this.ExpansionsMask = ExpansionsMask;
                     this.ModuleName = ModuleName;
 
@@ -369,7 +398,7 @@ AND `server_address` = '{1}'",
                 }
                 else
                 {
-                    Timesave(Now);
+                    Timesave();
                 }
             }
         }
@@ -385,6 +414,8 @@ AND `server_address` = '{1}'",
 
             lock (this)
             {
+                LastHeartbeat = Now;
+
                 if ((this.ExpansionsMask != Info.ExpansionsMask) ||
                     (this.MaximumPlayerCount != Info.MaximumPlayers) ||
                     (this.ActivePlayerCount != Info.ActivePlayers) ||
@@ -393,7 +424,6 @@ AND `server_address` = '{1}'",
                     (this.PrivateServer != Info.HasPlayerPassword) ||
                     (this.ModuleName != Info.ModuleName))
                 {
-                    LastHeartbeat = Now;
                     ExpansionsMask = Info.ExpansionsMask;
                     MaximumPlayerCount = Info.MaximumPlayers;
                     ActivePlayerCount = Info.ActivePlayers;
@@ -412,7 +442,7 @@ AND `server_address` = '{1}'",
                 }
                 else
                 {
-                    Timesave(Now);
+                    Timesave();
                 }
             }
         }
@@ -427,9 +457,10 @@ AND `server_address` = '{1}'",
 
             lock (this)
             {
+                LastHeartbeat = Now;
+
                 if (this.ServerName != ServerName)
                 {
-                    LastHeartbeat = Now;
                     this.ServerName = ServerName;
 
                     if (!Online)
@@ -442,7 +473,41 @@ AND `server_address` = '{1}'",
                 }
                 else
                 {
-                    Timesave(Now);
+                    Timesave();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called when a module description update is available.
+        /// </summary>
+        /// <param name="ModuleDescription">Supplies the new module
+        /// description.</param>
+        /// <param name="ModuleUrl">Supplies the new module url.</param>
+        /// <param name="GameType">Supplies the new game type.</param>
+        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType)
+        {
+            DateTime Now = DateTime.UtcNow;
+
+            lock (this)
+            {
+                LastHeartbeat = Now;
+
+                if ((this.ModuleDescription != ModuleDescription) ||
+                    (this.ModuleUrl != ModuleUrl) ||
+                    (this.GameType != GameType))
+                {
+                    if (!Online)
+                    {
+                        Online = true;
+                        StartHeartbeat();
+                    }
+
+                    Save();
+                }
+                else
+                {
+                    Timesave();
                 }
             }
         }
@@ -451,19 +516,12 @@ AND `server_address` = '{1}'",
         /// Initiate an auto save if necessary.  The server is assumed to be
         /// locked.
         /// </summary>
-        /// <param name="Now">Supplies the time stamp to save at.</param>
-        private void Timesave(DateTime Now)
+        private void Timesave()
         {
-            if ((Now >= LastHeartbeat) &&
-                (Now - LastHeartbeat) >= NWServerTracker.HeartbeatCutoffTimeSpan)
-            {
-                LastHeartbeat = Now;
+            uint Now = (uint)Environment.TickCount;
+
+            if ((Now - LastSaveTick) >= TIMESAVE_INTERVAL)
                 Save();
-            }
-            else
-            {
-                LastHeartbeat = Now;
-            }
         }
 
         /// <summary>
@@ -581,6 +639,21 @@ AND `server_address` = '{1}'",
         public bool PrivateServer { get; set; }
 
         /// <summary>
+        /// The module description.
+        /// </summary>
+        public string ModuleDescription { get; set; }
+
+        /// <summary>
+        /// The module URL.
+        /// </summary>
+        public string ModuleUrl { get; set; }
+
+        /// <summary>
+        /// The game type (category).
+        /// </summary>
+        public uint GameType { get; set; }
+
+        /// <summary>
         /// The internal database ID of the server, or zero if the server has
         /// not had an ID assigned yet.
         /// </summary>
@@ -600,6 +673,14 @@ AND `server_address` = '{1}'",
         /// the database.
         /// </summary>
         private const int HEARTBEAT_JITTER = 30000;
+
+        /// <summary>
+        /// The interval, in milliseconds, at which the heartbeat interval is
+        /// updated in the database for servers that do not change player
+        /// status information (i.e. which remain with a constant count of
+        /// users, etc.).
+        /// </summary>
+        private const uint TIMESAVE_INTERVAL = 15 * 60 * 1000;
 
 
         /// <summary>
@@ -621,5 +702,10 @@ AND `server_address` = '{1}'",
         /// Random number generator.
         /// </summary>
         private static Random Rng = new Random();
+
+        /// <summary>
+        /// The last tick that a timesave occurred at.
+        /// </summary>
+        private uint LastSaveTick = (uint)Environment.TickCount - TIMESAVE_INTERVAL;
     }
 }
