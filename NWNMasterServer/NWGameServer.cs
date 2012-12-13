@@ -497,6 +497,10 @@ AND `server_address` = '{1}'",
                     (this.ModuleUrl != ModuleUrl) ||
                     (this.GameType != GameType))
                 {
+                    this.ModuleDescription = ModuleDescription;
+                    this.ModuleUrl = ModuleUrl;
+                    this.GameType = GameType;
+
                     if (!Online)
                     {
                         Online = true;

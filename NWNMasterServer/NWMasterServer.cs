@@ -1245,6 +1245,8 @@ namespace NWNMasterServer
             Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerDescriptionRequest(): Sending server description request to {0}.", Address);
+
+            SendRawDataToMstClient(Address, Builder);
         }
 
 
