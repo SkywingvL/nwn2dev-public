@@ -1075,7 +1075,8 @@ namespace NWNMasterServer
 
             Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{0}' URL '{1}' has game type {2}.",
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{1}' URL '{2}' has game type {3}.",
+                Sender,
                 ModuleDescription,
                 ModuleUrl,
                 GameType);
