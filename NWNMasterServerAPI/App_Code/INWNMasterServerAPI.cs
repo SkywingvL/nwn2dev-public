@@ -60,6 +60,22 @@ namespace NWN
         /// <returns>A list of matching online servers is returned.</returns>
         [OperationContract]
         IList<NWGameServer> GetOnlineServerList(string Product);
+
+        /// <summary>
+        /// Get a count of online users (players) for a given product.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <returns>The count of active users across all known servers for the
+        /// given product.</returns>
+        [OperationContract]
+        uint GetOnlineUserCount(string Product);
+
+        /// <summary>
+        /// Get the list of supported product names, e.g. "NWN1", "NWN2".
+        /// </summary>
+        /// <returns>The list of supported product name values.</returns>
+        [OperationContract]
+        IList<string> GetSupportedProductList();
     }
 
     /// <summary>

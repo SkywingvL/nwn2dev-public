@@ -132,6 +132,42 @@ namespace NWN
         }
 
         /// <summary>
+        /// Get a count of online users (players) for a given product.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <returns>The count of active users across all known servers for the
+        /// given product.</returns>
+        public uint GetOnlineUserCount(string Product)
+        {
+            string Query = String.Format(
+    @"SELECT
+        COUNT(*)
+    FROM
+        `game_servers`
+    WHERE `product_id` = {0} 
+    AND `online` = true
+    ",
+            ProductNameToId(Product));
+
+            using (MySqlDataReader Reader = MySqlHelper.ExecuteReader(ConnectionString, Query))
+            {
+                if (!Reader.Read())
+                    return 0;
+
+                return Reader.GetUInt32(0);
+            }
+        }
+
+        /// <summary>
+        /// Get the list of supported product names, e.g. "NWN1", "NWN2".
+        /// </summary>
+        /// <returns>The list of supported product name values.</returns>
+        public IList<string> GetSupportedProductList()
+        {
+            return new List<string> { "NWN1", "NWN2" };
+        }
+
+        /// <summary>
         /// Read server parameters from the standard database query column
         /// layout and construct and return a NWGameServer corresponding to the
         /// data in question.
@@ -197,7 +233,7 @@ SELECT `game_server_id`,
         `module_description`,
         `module_url`,
         `game_type`
-    FROM `game_servers` @";
+    FROM `game_servers` ";
 
         /// <summary>
         /// The connection string for the web service.
