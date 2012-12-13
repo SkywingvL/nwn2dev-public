@@ -260,6 +260,9 @@ AND `online` = true",
                         Server.LastHeartbeat = Reader.GetDateTime(8);
                         Server.Online = Reader.GetBoolean(10);
                         Server.PrivateServer = Reader.GetBoolean(11);
+                        Server.ModuleDescription = Reader.GetString(12);
+                        Server.ModuleUrl = Reader.GetString(13);
+                        Server.GameType = Reader.GetUInt32(14);
 
                         lock (ActiveServerTable)
                         {
