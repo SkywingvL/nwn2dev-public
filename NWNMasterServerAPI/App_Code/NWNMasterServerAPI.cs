@@ -43,23 +43,8 @@ namespace NWN
             List<NWGameServer> Servers = new List<NWGameServer>();
 
             string Query = String.Format(
-    @"SELECT `game_server_id`,
-        `expansions_mask`,
-        `build_number`,
-        `module_name`,
-        `server_name`,
-        `active_player_count`,
-        `maximum_player_count`,
-        `local_vault`,
-        `last_heartbeat`,
-        `server_address`,
-        `online`,
-        `private_server`,
-        `module_description`,
-        `module_url`,
-        `game_type`
-    FROM `game_servers`
-    WHERE `product_id` = {0}
+                StandardServerQueryPrefix +
+    @"WHERE `product_id` = {0}
     AND `online` = true
     AND `server_name` = '{1}'
     ",
@@ -70,23 +55,9 @@ namespace NWN
             {
                 while (Reader.Read())
                 {
-                    NWGameServer Server = new NWGameServer();
+                    NWGameServer Server = LoadGameServerFromQuery(Reader);
 
-                    Server.ExpansionsMask = Reader.GetUInt32(1);
-                    Server.BuildNumber = Reader.GetUInt32(2);
-                    Server.ModuleName = Reader.GetString(3);
-                    Server.ServerName = Reader.GetString(4);
-                    Server.ActivePlayerCount = Reader.GetUInt32(5);
-                    Server.MaximumPlayerCount = Reader.GetUInt32(6);
-                    Server.LocalVault = Reader.GetBoolean(7);
-                    Server.LastHeartbeat = Reader.GetDateTime(8);
-                    Server.ServerAddress = Reader.GetString(9);
-                    Server.Online = Reader.GetBoolean(10);
-                    Server.PrivateServer = Reader.GetBoolean(11);
                     Server.Product = Product;
-                    Server.ModuleDescription = Reader.GetString(12);
-                    Server.ModuleUrl = Reader.GetString(13);
-                    Server.GameType = Reader.GetUInt32(14);
 
                     Servers.Add(Server);
                 }
@@ -106,23 +77,8 @@ namespace NWN
         public NWGameServer LookupServerByAddress(string Product, string ServerAddress)
         {
             string Query = String.Format(
-    @"SELECT `game_server_id`,
-        `expansions_mask`,
-        `build_number`,
-        `module_name`,
-        `server_name`,
-        `active_player_count`,
-        `maximum_player_count`,
-        `local_vault`,
-        `last_heartbeat`,
-        `server_address`,
-        `online`,
-        `private_server`,
-        `module_description`,
-        `module_url`,
-        `game_type`
-    FROM `game_servers`
-    WHERE `product_id` = {0}
+                StandardServerQueryPrefix +
+    @"WHERE `product_id` = {0}
     AND `server_address` = '{1}'
     ",
             ProductNameToId(Product),
@@ -132,23 +88,9 @@ namespace NWN
             {
                 if (Reader.Read())
                 {
-                    NWGameServer Server = new NWGameServer();
+                    NWGameServer Server = LoadGameServerFromQuery(Reader);
 
-                    Server.ExpansionsMask = Reader.GetUInt32(1);
-                    Server.BuildNumber = Reader.GetUInt32(2);
-                    Server.ModuleName = Reader.GetString(3);
-                    Server.ServerName = Reader.GetString(4);
-                    Server.ActivePlayerCount = Reader.GetUInt32(5);
-                    Server.MaximumPlayerCount = Reader.GetUInt32(6);
-                    Server.LocalVault = Reader.GetBoolean(7);
-                    Server.LastHeartbeat = Reader.GetDateTime(8);
-                    Server.ServerAddress = Reader.GetString(9);
-                    Server.Online = Reader.GetBoolean(10);
-                    Server.PrivateServer = Reader.GetBoolean(11);
                     Server.Product = Product;
-                    Server.ModuleDescription = Reader.GetString(12);
-                    Server.ModuleUrl = Reader.GetString(13);
-                    Server.GameType = Reader.GetUInt32(14);
 
                     return Server;
                 }
@@ -168,23 +110,8 @@ namespace NWN
             List<NWGameServer> Servers = new List<NWGameServer>();
 
             string Query = String.Format(
-    @"SELECT `game_server_id`,
-        `expansions_mask`,
-        `build_number`,
-        `module_name`,
-        `server_name`,
-        `active_player_count`,
-        `maximum_player_count`,
-        `local_vault`,
-        `last_heartbeat`,
-        `server_address`,
-        `online`,
-        `private_server`,
-        `module_description`,
-        `module_url`,
-        `game_type`
-    FROM `game_servers`
-    WHERE `product_id` = {0}
+                StandardServerQueryPrefix + 
+    @"WHERE `product_id` = {0}
     AND `online` = true
     ",
             ProductNameToId(Product));
@@ -193,29 +120,45 @@ namespace NWN
             {
                 while (Reader.Read())
                 {
-                    NWGameServer Server = new NWGameServer();
+                    NWGameServer Server = LoadGameServerFromQuery(Reader);
 
-                    Server.ExpansionsMask = Reader.GetUInt32(1);
-                    Server.BuildNumber = Reader.GetUInt32(2);
-                    Server.ModuleName = Reader.GetString(3);
-                    Server.ServerName = Reader.GetString(4);
-                    Server.ActivePlayerCount = Reader.GetUInt32(5);
-                    Server.MaximumPlayerCount = Reader.GetUInt32(6);
-                    Server.LocalVault = Reader.GetBoolean(7);
-                    Server.LastHeartbeat = Reader.GetDateTime(8);
-                    Server.ServerAddress = Reader.GetString(9);
-                    Server.Online = Reader.GetBoolean(10);
-                    Server.PrivateServer = Reader.GetBoolean(11);
                     Server.Product = Product;
-                    Server.ModuleDescription = Reader.GetString(12);
-                    Server.ModuleUrl = Reader.GetString(13);
-                    Server.GameType = Reader.GetUInt32(14);
 
                     Servers.Add(Server);
                 }
             }
 
             return Servers;
+        }
+
+        /// <summary>
+        /// Read server parameters from the standard database query column
+        /// layout and construct and return a NWGameServer corresponding to the
+        /// data in question.
+        /// </summary>
+        /// <param name="Reader">Supplies a reader containing the results of a
+        /// query that correspond to the standard column set.</param>
+        /// <returns>A NWGameServer object describing the current row.</returns>
+        private NWGameServer LoadGameServerFromQuery(MySqlDataReader Reader)
+        {
+            NWGameServer Server = new NWGameServer();
+
+            Server.ExpansionsMask = Reader.GetUInt32(1);
+            Server.BuildNumber = Reader.GetUInt32(2);
+            Server.ModuleName = Reader.GetString(3);
+            Server.ServerName = Reader.GetString(4);
+            Server.ActivePlayerCount = Reader.GetUInt32(5);
+            Server.MaximumPlayerCount = Reader.GetUInt32(6);
+            Server.LocalVault = Reader.GetBoolean(7);
+            Server.LastHeartbeat = Reader.GetDateTime(8);
+            Server.ServerAddress = Reader.GetString(9);
+            Server.Online = Reader.GetBoolean(10);
+            Server.PrivateServer = Reader.GetBoolean(11);
+            Server.ModuleDescription = Reader.GetString(12);
+            Server.ModuleUrl = Reader.GetString(13);
+            Server.GameType = Reader.GetUInt32(14);
+
+            return Server;
         }
 
         /// <summary>
@@ -233,6 +176,28 @@ namespace NWN
             else
                 return 0;
         }
+
+        /// <summary>
+        /// The standard query prefix for queries to return a server.  For use
+        /// with LoadGameServerFromQuery().
+        /// </summary>
+        private static string StandardServerQueryPrefix = @"
+SELECT `game_server_id`,
+        `expansions_mask`,
+        `build_number`,
+        `module_name`,
+        `server_name`,
+        `active_player_count`,
+        `maximum_player_count`,
+        `local_vault`,
+        `last_heartbeat`,
+        `server_address`,
+        `online`,
+        `private_server`,
+        `module_description`,
+        `module_url`,
+        `game_type`
+    FROM `game_servers` @";
 
         /// <summary>
         /// The connection string for the web service.
