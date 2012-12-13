@@ -54,7 +54,10 @@ namespace NWN
         `last_heartbeat`,
         `server_address`,
         `online`,
-        `private_server`
+        `private_server`,
+        `module_description`,
+        `module_url`,
+        `game_type`
     FROM `game_servers`
     WHERE `product_id` = {0}
     AND `online` = true
@@ -81,6 +84,9 @@ namespace NWN
                     Server.Online = Reader.GetBoolean(10);
                     Server.PrivateServer = Reader.GetBoolean(11);
                     Server.Product = Product;
+                    Server.ModuleDescription = Reader.GetString(12);
+                    Server.ModuleUrl = Reader.GetString(13);
+                    Server.GameType = Reader.GetUInt32(14);
 
                     Servers.Add(Server);
                 }
@@ -111,7 +117,10 @@ namespace NWN
         `last_heartbeat`,
         `server_address`,
         `online`,
-        `private_server`
+        `private_server`,
+        `module_description`,
+        `module_url`,
+        `game_type`
     FROM `game_servers`
     WHERE `product_id` = {0}
     AND `server_address` = '{1}'
@@ -137,6 +146,9 @@ namespace NWN
                     Server.Online = Reader.GetBoolean(10);
                     Server.PrivateServer = Reader.GetBoolean(11);
                     Server.Product = Product;
+                    Server.ModuleDescription = Reader.GetString(12);
+                    Server.ModuleUrl = Reader.GetString(13);
+                    Server.GameType = Reader.GetUInt32(14);
 
                     return Server;
                 }
@@ -167,7 +179,10 @@ namespace NWN
         `last_heartbeat`,
         `server_address`,
         `online`,
-        `private_server`
+        `private_server`,
+        `module_description`,
+        `module_url`,
+        `game_type`
     FROM `game_servers`
     WHERE `product_id` = {0}
     AND `online` = true
@@ -192,6 +207,9 @@ namespace NWN
                     Server.Online = Reader.GetBoolean(10);
                     Server.PrivateServer = Reader.GetBoolean(11);
                     Server.Product = Product;
+                    Server.ModuleDescription = Reader.GetString(12);
+                    Server.ModuleUrl = Reader.GetString(13);
+                    Server.GameType = Reader.GetUInt32(14);
 
                     Servers.Add(Server);
                 }

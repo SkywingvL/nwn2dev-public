@@ -146,5 +146,23 @@ namespace NWN
         /// </summary>
         [DataMember]
         public bool PrivateServer { get; set; }
+
+        /// <summary>
+        /// The module description.
+        /// </summary>
+        [DataMember]
+        public string ModuleDescription { get; set; }
+
+        /// <summary>
+        /// The module URL.
+        /// </summary>
+        [DataMember]
+        public string ModuleUrl { get; set; }
+
+        /// <summary>
+        /// The game type (category) selected for the server.
+        /// </summary>
+        [DataMember]
+        public uint GameType { get; set; }
     }
 }
