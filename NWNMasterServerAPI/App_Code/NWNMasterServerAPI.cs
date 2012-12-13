@@ -141,7 +141,7 @@ namespace NWN
         {
             string Query = String.Format(
     @"SELECT
-        COUNT(*)
+        SUM(active_player_count)
     FROM
         `game_servers`
     WHERE `product_id` = {0} 
