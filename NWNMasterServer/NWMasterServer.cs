@@ -307,9 +307,9 @@ namespace NWNMasterServer
             EndPoint LocalEndPoint;
 
             if (String.IsNullOrEmpty(BindAddress))
-                LocalEndPoint = new IPEndPoint(IPAddress.Any, MASTER_SERVER_PORT);
+                LocalEndPoint = new IPEndPoint(IPAddress.Any, (int)MasterServerPort);
             else
-                LocalEndPoint = new IPEndPoint(IPAddress.Parse(BindAddress), MASTER_SERVER_PORT);
+                LocalEndPoint = new IPEndPoint(IPAddress.Parse(BindAddress), (int)MasterServerPort);
 
             ServerSocket.Blocking = false;
             ServerSocket.Bind(LocalEndPoint);
@@ -1288,7 +1288,7 @@ namespace NWNMasterServer
             ExoBuildBuffer Builder = new ExoBuildBuffer();
 
             Builder.WriteDWORD((uint)ConnAuthCmd.ServerInfoRequest);
-            Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
+            Builder.WriteWORD((ushort)MasterServerPort);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
 
@@ -1304,7 +1304,7 @@ namespace NWNMasterServer
             ExoBuildBuffer Builder = new ExoBuildBuffer();
 
             Builder.WriteDWORD((uint)ConnAuthCmd.ServerNameRequest);
-            Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
+            Builder.WriteWORD((ushort)MasterServerPort);
             Builder.WriteBYTE(0); // Request correlation cookie.
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerNameRequest(): Sending server name request to {0}.", Address);
@@ -1321,7 +1321,7 @@ namespace NWNMasterServer
             ExoBuildBuffer Builder = new ExoBuildBuffer();
 
             Builder.WriteDWORD((uint)ConnAuthCmd.ServerDescriptionRequest);
-            Builder.WriteWORD((ushort)MASTER_SERVER_PORT);
+            Builder.WriteWORD((ushort)MasterServerPort);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerDescriptionRequest(): Sending server description request to {0}.", Address);
 
@@ -1823,6 +1823,11 @@ namespace NWNMasterServer
         /// The product ID for the game_servers table.
         /// </summary>
         private uint ServerProductID = ServerSettings.Default.ProductID;
+
+        /// <summary>
+        /// The default port number for the master server.
+        /// </summary>
+        private uint MasterServerPort = ServerSettings.Default.MasterServerPort;
 
         /// <summary>
         /// Timekeeping for query combining.

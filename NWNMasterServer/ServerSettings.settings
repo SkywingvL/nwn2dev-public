@@ -29,5 +29,8 @@ http://www.atarisupport.com</Value>
     <Setting Name="ProductID" Type="System.UInt32" Scope="User">
       <Value Profile="(Default)">2</Value>
     </Setting>
+    <Setting Name="MasterServerPort" Type="System.UInt32" Scope="User">
+      <Value Profile="(Default)">6121</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

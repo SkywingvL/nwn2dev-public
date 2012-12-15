@@ -109,5 +109,17 @@ namespace NWNMasterServer {
                 this["ProductID"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("6121")]
+        public uint MasterServerPort {
+            get {
+                return ((uint)(this["MasterServerPort"]));
+            }
+            set {
+                this["MasterServerPort"] = value;
+            }
+        }
     }
 }
