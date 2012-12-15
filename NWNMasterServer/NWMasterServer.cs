@@ -90,6 +90,12 @@ namespace NWNMasterServer
                 {
                     Buffers[i].Buffer = new byte[MAX_FRAME_SIZE];
                     Buffers[i].Sender = new IPEndPoint(0, 0);
+
+                    if (i <= BUFFER_COUNT / 2)
+                        Buffers[i].AssociatedSocket = ServerSocket;
+                    else
+                        Buffers[i].AssociatedSocket = GameSpySocket;
+
                     InitiateReceive(Buffers[i]);
                 }
 
@@ -124,7 +130,9 @@ namespace NWNMasterServer
                         //
 
                         ServerSocket.Shutdown(SocketShutdown.Receive);
+                        GameSpySocket.Shutdown(SocketShutdown.Receive);
                         ServerSocket.Close(15);
+                        GameSpySocket.Close(15);
                         IsShutdown = true;
                         ServerTracker.DrainHeartbeats();
                     }
@@ -306,6 +314,15 @@ namespace NWNMasterServer
             ServerSocket.Blocking = false;
             ServerSocket.Bind(LocalEndPoint);
             ServerSocket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+
+            if (String.IsNullOrEmpty(BindAddress))
+                LocalEndPoint = new IPEndPoint(IPAddress.Any, GAMESPY_SERVER_PORT);
+            else
+                LocalEndPoint = new IPEndPoint(IPAddress.Parse(BindAddress), GAMESPY_SERVER_PORT);
+
+            GameSpySocket.Blocking = false;
+            GameSpySocket.Bind(LocalEndPoint);
+            GameSpySocket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
         }
 
         /// <summary>
@@ -333,7 +350,7 @@ namespace NWNMasterServer
             try
             {
                 EndPoint RecvEndPoint = (EndPoint)Buffer.Sender;
-                IAsyncResult Result = ServerSocket.BeginReceiveFrom(
+                IAsyncResult Result = Buffer.AssociatedSocket.BeginReceiveFrom(
                     Buffer.Buffer,
                     0,
                     Buffer.Buffer.Length,
@@ -367,7 +384,7 @@ namespace NWNMasterServer
             {
                 try
                 {
-                    RecvLen = ServerSocket.EndReceiveFrom(Result, ref RecvEndPoint);
+                    RecvLen = Buffer.AssociatedSocket.EndReceiveFrom(Result, ref RecvEndPoint);
                 }
                 catch (SocketException e)
                 {
@@ -400,7 +417,10 @@ namespace NWNMasterServer
             {
                 if (RecvLen > 0)
                 {
-                    OnRecvDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint);
+                    if (Buffer.AssociatedSocket == ServerSocket)
+                        OnRecvMstDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint);
+                    else
+                        OnRecvGameSpyDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint);
                 }
             }
             catch (Exception e)
@@ -413,6 +433,10 @@ namespace NWNMasterServer
             InitiateReceive(Buffer);
         }
 
+        /// <summary>
+        /// Send completion callback for master server socket.
+        /// </summary>
+        /// <param name="Result">Supplies the associated async result.</param>
         private void SendCompletionCallback(IAsyncResult Result)
         {
             int SentBytes;
@@ -436,6 +460,32 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// Send completion callback for GameSpy server socket.
+        /// </summary>
+        /// <param name="Result">Supplies the associated async result.</param>
+        private void GameSpySendCompletionCallback(IAsyncResult Result)
+        {
+            int SentBytes;
+            IPEndPoint Recipient = (IPEndPoint)Result.AsyncState;
+
+            try
+            {
+                SentBytes = GameSpySocket.EndSendTo(Result);
+            }
+            catch (SocketException e)
+            {
+                Logger.Log(LogLevel.Error, "NWMasterServer.GameSpySendCompletionCallback(): Unexpected receive error for host {0}: {1} (Exception: {2})",
+                    Recipient,
+                    e.SocketErrorCode,
+                    e);
+            }
+            catch (Exception e)
+            {
+                Logger.Log(LogLevel.Error, "NWMasterServer.GameSpySendCompletionCallback(): Exception: {0}", e);
+            }
+        }
+
+        /// <summary>
         /// This method handles a received datagram on the master server
         /// socket.  It examines the request and dispatches it as appropriate.
         /// </summary>
@@ -443,7 +493,7 @@ namespace NWNMasterServer
         /// <param name="RecvLen">Supplies the length of the received
         /// datagram.</param>
         /// <param name="Sender">Supplies the datagram sender.</param>
-        private void OnRecvDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender)
+        private void OnRecvMstDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender)
         {
             if (RecvLen < 4)
                 return;
@@ -464,6 +514,34 @@ namespace NWNMasterServer
                     ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 4, null, 0);
 
                     OnRecvMstMessage(Cmd, ParseBuffer, Sender);
+                }
+            }
+        }
+
+        /// <summary>
+        /// This method handles a received datagram on the GameSpy server
+        /// socket.  It examines the request and dispatches it as appropriate.
+        /// </summary>
+        /// <param name="Buffer">Supplies the received datagram.</param>
+        /// <param name="RecvLen">Supplies the length of the received
+        /// datagram.</param>
+        /// <param name="Sender">Supplies the datagram sender.</param>
+        private void OnRecvGameSpyDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender)
+        {
+            if (RecvLen < 1)
+                return;
+
+            unsafe
+            {
+                uint Cmd = (uint)Buffer[0];
+
+                fixed (void* ByteData = &Buffer[1])
+                {
+                    ExoParseBuffer ParseBuffer;
+
+                    ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 1, null, 0);
+
+                    OnRecvGameSpyMessage(Cmd, ParseBuffer, Sender);
                 }
             }
         }
@@ -1264,6 +1342,64 @@ namespace NWNMasterServer
         }
 
 
+        /// <summary>
+        /// This method handles a received GameSpy server communication
+        /// protocol message.  The message is examined and then dispatched to
+        /// a handler.
+        /// </summary>
+        /// <param name="Cmd">Supplies the command code of the message.</param>
+        /// <param name="ParseBuffer">Supplies the message body.</param>
+        /// <param name="Sender">Supplies the reply address for the
+        /// sender.</param>
+        private void OnRecvGameSpyMessage(uint Cmd, ExoParseBuffer ParseBuffer, IPEndPoint Sender)
+        {
+            switch (Cmd)
+            {
+
+                case (uint)GameSpyCmd.CheckServerStatus:
+                    OnRecvGameSpyCheckServerStatus(ParseBuffer, Sender);
+                    break;
+
+            }
+        }
+
+        /// <summary>
+        /// This method parses a GameSpy check server status request from a
+        /// client.</summary>
+        /// <param name="Parser">Supplies the message parser context.</param>
+        /// <param name="Sender">Supplies the game server address.</param>
+        private void OnRecvGameSpyCheckServerStatus(ExoParseBuffer Parser, IPEndPoint Sender)
+        {
+            //
+            // The message contains:
+            // (DWORD) 0
+            // (STRING) ProductName "nwn2"
+            //
+
+            SendGameSpyCheckServerStatusResponse(Sender);
+        }
+
+        /// <summary>
+        /// This method sends a GameSpy server status acknowledgement back to
+        /// a GameSpy client, informing the client that GameSpy services should
+        /// be considered as available and operational.
+        /// </summary>
+        /// <param name="Address">Supplies the recipient address.</param>
+        public void SendGameSpyCheckServerStatusResponse(IPEndPoint Address)
+        {
+            ExoBuildBuffer Builder = new ExoBuildBuffer();
+
+            Builder.WriteWORD(0xFDFE);
+            Builder.WriteBYTE((byte)GameSpyCmd.CheckServerStatus);
+            Builder.WriteDWORD(0);
+
+            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendGameSpyCheckServerStatusResponse(): Sending GameSpy aliveness acknowledgement to {0}.", Address);
+
+            SendRawDataToGameSpyClient(Address, Builder);
+        }
+
+
+
 
         /// <summary>
         /// This method transmits a raw datagram to a master server client,
@@ -1340,6 +1476,82 @@ namespace NWNMasterServer
             }
         }
 
+        /// <summary>
+        /// This method transmits a raw datagram to a GameSpy server client,
+        /// such as a game client.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="Builder">Supplies the message body.</param>
+        private void SendRawDataToGameSpyClient(IPEndPoint Address, ExoBuildBuffer Builder)
+        {
+            unsafe
+            {
+                byte* ByteStream;
+                uint ByteStreamLength;
+                byte* BitStream;
+                uint BitStreamLength;
+                byte[] CompositeBuffer;
+                uint CompositeBufferLength;
+
+                Builder.GetBuffer(
+                    out ByteStream,
+                    out ByteStreamLength,
+                    out BitStream,
+                    out BitStreamLength);
+
+                CompositeBufferLength = ByteStreamLength + BitStreamLength;
+
+                if (CompositeBufferLength == 0)
+                    return;
+
+                //
+                // Allocate a contiguous message buffer, and fail here and now
+                // if we can't.
+                //
+
+                try
+                {
+                    CompositeBuffer = new byte[CompositeBufferLength];
+
+                    //
+                    // Assemble the discrete components into a single
+                    // contiguous composite buffer for outbound trnasmission.
+                    //
+
+                    Marshal.Copy(
+                        (IntPtr)ByteStream,
+                        CompositeBuffer,
+                        0,
+                        (int)ByteStreamLength);
+
+                    for (uint i = 0; i < BitStreamLength; i += 1)
+                    {
+                        CompositeBuffer[ByteStreamLength + i] = BitStream[i];
+                    }
+
+                    //
+                    // Transmit the underlying message now that we have
+                    // captured it into a flat buffer consumable by the I/O
+                    // system.
+                    //
+
+                    IAsyncResult Result = GameSpySocket.BeginSendTo(
+                        CompositeBuffer,
+                        0,
+                        (int)CompositeBufferLength,
+                        SocketFlags.None,
+                        Address,
+                        GameSpySendCompletionCallback,
+                        Address);
+                }
+                catch (Exception e)
+                {
+                    Logger.Log(LogLevel.Error, "NWMasterServer.SendRawDataToGameSpyClient(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
+                }
+            }
+        }
+
+
 #pragma warning disable 420 // a reference to a volatile field will not be treated as volatile
 
         /// <summary>
@@ -1369,6 +1581,7 @@ namespace NWNMasterServer
         {
             public byte[] Buffer;
             public IPEndPoint Sender;
+            public Socket AssociatedSocket;
         }
 
         /// <summary>
@@ -1422,6 +1635,20 @@ namespace NWNMasterServer
             ServerInfoResponse = 0x52584e42, // BNXR
             ServerNameResponse = 0x52454e42, // BNER
             ServerDescriptionResponse = 0x52444e42, // BNDR
+        }
+
+        /// <summary>
+        /// Command codes for GameSpy protocol.
+        /// </summary>
+        public enum GameSpyCmd : uint
+        {
+            Query = 0x00,
+            Challenge = 0x01,
+            Heartbeat = 0x03,
+            Keepalive = 0x08,
+            CheckServerStatus = 0x09,
+
+            RegStatus = 0x0A,
         }
 
         /// <summary>
@@ -1506,7 +1733,7 @@ namespace NWNMasterServer
         /// <summary>
         /// Count of buffers to simultaneously attempt to fill.
         /// </summary>
-        private const int BUFFER_COUNT = 5;
+        private const int BUFFER_COUNT = 10;
 
         /// <summary>
         /// The master server port number.
@@ -1514,9 +1741,14 @@ namespace NWNMasterServer
         private const int MASTER_SERVER_PORT = 6121;
 
         /// <summary>
+        /// The GameSpy master server port number.
+        /// </summary>
+        private const int GAMESPY_SERVER_PORT = 27900;
+
+        /// <summary>
         /// Maximum datagram frame size allowed.
         /// </summary>
-        private const int MAX_FRAME_SIZE = 1472;
+        private const int MAX_FRAME_SIZE = 3200;
 
         /// <summary>
         /// The amount of time, in milliseconds, that queries should be held
@@ -1555,6 +1787,12 @@ namespace NWNMasterServer
         /// replies with).
         /// </summary>
         private Socket ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+        /// <summary>
+        /// The UDP socket to receive GameSpy messages from (and to send
+        /// replies with).
+        /// </summary>
+        private Socket GameSpySocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 
         /// <summary>
         /// The server tracker instance that retains state about known servers.
