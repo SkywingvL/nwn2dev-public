@@ -1021,8 +1021,18 @@ namespace NWNMasterServer
                 return;
             if (!Parser.ReadBYTE(out Reserved))
                 return;
-            if (Reserved != 0xFC)
-                return;
+
+            if (Mode == GameMode.NWN2)
+            {
+                if (Reserved != 0xFC)
+                    return;
+            }
+            else
+            {
+                if (Reserved != 0xFD)
+                    return;
+            }
+
             if (!Parser.ReadBYTE(out HasPlayerPassword))
                 return;
             if (!Parser.ReadBYTE(out MinLevel))
@@ -1049,8 +1059,16 @@ namespace NWNMasterServer
                 return;
             if (!Parser.ReadSmallString(out ModuleName))
                 return;
-            if (!Parser.ReadSmallString(out BuildNumber))
-                return;
+
+            if (Mode == GameMode.NWN2)
+            {
+                if (!Parser.ReadSmallString(out BuildNumber))
+                    return;
+            }
+            else
+            {
+                BuildNumber = "0";
+            }
 
             try
             {
@@ -1080,6 +1098,9 @@ namespace NWNMasterServer
             //
 
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+
+            if (Mode != GameMode.NWN2)
+                Info.BuildNumber = Server.BuildNumber;
 
             Server.OnServerInfoUpdate(Info);
 
@@ -1133,6 +1154,7 @@ namespace NWNMasterServer
             UInt16 GameType;
             string ModuleUrl;
             string PWCUrl;
+            UInt16 Build;
 
             if (!Parser.ReadWORD(out DataPort))
                 return;
@@ -1144,14 +1166,32 @@ namespace NWNMasterServer
                 return;
             if (!Parser.ReadWORD(out GameType))
                 return;
-            if (!Parser.ReadSmallString(out ModuleUrl, 32))
-                return;
-            if (!Parser.ReadSmallString(out PWCUrl, 32))
-                return;
+
+            if (Mode == GameMode.NWN2)
+            {
+                if (!Parser.ReadSmallString(out ModuleUrl, 32))
+                    return;
+                if (!Parser.ReadSmallString(out PWCUrl, 32))
+                    return;
+            }
+            else
+            {
+                ModuleUrl = "";
+                PWCUrl = "";
+            }
+
+            try
+            {
+                Build = Convert.ToUInt16(BuildNumber);
+            }
+            catch
+            {
+                Build = 0;
+            }
 
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
 
-            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl);
+            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl, Build);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{1}' URL '{2}' has game type {3}.",
                 Sender,

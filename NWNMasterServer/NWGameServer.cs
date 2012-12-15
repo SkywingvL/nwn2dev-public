@@ -551,7 +551,8 @@ AND `server_address` = '{1}'",
         /// <param name="ModuleUrl">Supplies the new module url.</param>
         /// <param name="GameType">Supplies the new game type.</param>
         /// <param name="PWCUrl">Supplies the new PWC url.</param>
-        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType, string PWCUrl)
+        /// <param name="BuildNumber">Supplies the new build number.</param>
+        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType, string PWCUrl, UInt16 BuildNumber)
         {
             DateTime Now = DateTime.UtcNow;
 
@@ -562,12 +563,14 @@ AND `server_address` = '{1}'",
                 if ((this.ModuleDescription != ModuleDescription) ||
                     (this.ModuleUrl != ModuleUrl) ||
                     (this.GameType != GameType) ||
-                    (this.PWCUrl != PWCUrl))
+                    (this.PWCUrl != PWCUrl) ||
+                    (this.BuildNumber != BuildNumber))
                 {
                     this.ModuleDescription = ModuleDescription;
                     this.ModuleUrl = ModuleUrl;
                     this.GameType = GameType;
                     this.PWCUrl = PWCUrl;
+                    this.BuildNumber = BuildNumber;
 
                     if (!Online)
                     {
