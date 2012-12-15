@@ -187,10 +187,19 @@ namespace NWNMasterServer
     `module_description` varchar(256) NOT NULL,
     `module_url` varchar(256) NOT NULL,
     `game_type` int(10) UNSIGNED NOT NULL,
+    `minimum_level` int(10) UNSIGNED NOT NULL,
+    `maximum_level` int(10) UNSIGNED NOT NULL,
+    `pvp_level` int(10) UNSIGNED NOT NULL,
+    `player_pause` bool NOT NULL,
+    `one_party_only` bool NOT NULL,
+    `elc_enforced` bool NOT NULL,
+    `ilr_enforced` bool NOT NULL,
+    `pwc_url` varchar(256) NOT NULL,
     PRIMARY KEY (`game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`),
     INDEX (`product_id`, `online`),
-    INDEX (`product_id`, `online`, `server_name`)
+    INDEX (`product_id`, `online`, `server_name`),
+    INDEX (`product_id`, `online`, `module_name`)
     )");
 
                 string Query = String.Format(
@@ -208,7 +217,15 @@ namespace NWNMasterServer
     `private_server`,
     `module_description`,
     `module_url`,
-    `game_type`
+    `game_type`,
+    `minimum_level`,
+    `maximum_level`,
+    `pvp_level`,
+    `player_pause`,
+    `one_party_only`,
+    `elc_enforced`,
+    `ilr_enforced`,
+    `pwc_url`
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `online` = true",
@@ -263,6 +280,14 @@ AND `online` = true",
                         Server.ModuleDescription = Reader.GetString(12);
                         Server.ModuleUrl = Reader.GetString(13);
                         Server.GameType = Reader.GetUInt32(14);
+                        Server.MinimumLevel = Reader.GetUInt32(15);
+                        Server.MaximumLevel = Reader.GetUInt32(16);
+                        Server.PVPLevel = Reader.GetUInt32(17);
+                        Server.PlayerPause = Reader.GetBoolean(18);
+                        Server.OnePartyOnly = Reader.GetBoolean(19);
+                        Server.ELCEnforced = Reader.GetBoolean(20);
+                        Server.ILREnforced = Reader.GetBoolean(21);
+                        Server.PWCUrl = Reader.GetString(22);
 
                         lock (ActiveServerTable)
                         {

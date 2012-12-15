@@ -168,6 +168,41 @@ namespace NWN
         }
 
         /// <summary>
+        /// Search the server database for a server by module, and return any
+        /// matching servers (zero or more).
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="Module">Supplies the server name.</param>
+        /// <returns>A list of matching servers is returned.</returns>
+        public IList<NWGameServer> LookupServerByModule(string Product, string Module)
+        {
+            List<NWGameServer> Servers = new List<NWGameServer>();
+
+            string Query = String.Format(
+                StandardServerQueryPrefix +
+    @"WHERE `product_id` = {0}
+    AND `online` = true
+    AND `module_name` = '{1}'
+    ",
+            ProductNameToId(Product),
+            MySqlHelper.EscapeString(Module));
+
+            using (MySqlDataReader Reader = MySqlHelper.ExecuteReader(ConnectionString, Query))
+            {
+                while (Reader.Read())
+                {
+                    NWGameServer Server = LoadGameServerFromQuery(Reader);
+
+                    Server.Product = Product;
+
+                    Servers.Add(Server);
+                }
+            }
+
+            return Servers;
+        }
+
+        /// <summary>
         /// Read server parameters from the standard database query column
         /// layout and construct and return a NWGameServer corresponding to the
         /// data in question.
@@ -193,6 +228,14 @@ namespace NWN
             Server.ModuleDescription = Reader.GetString(12);
             Server.ModuleUrl = Reader.GetString(13);
             Server.GameType = Reader.GetUInt32(14);
+            Server.MinimumLevel = Reader.GetUInt32(15);
+            Server.MaximumLevel = Reader.GetUInt32(16);
+            Server.PVPLevel = Reader.GetUInt32(17);
+            Server.PlayerPause = Reader.GetBoolean(18);
+            Server.OnePartyOnly = Reader.GetBoolean(19);
+            Server.ELCEnforced = Reader.GetBoolean(20);
+            Server.ILREnforced = Reader.GetBoolean(21);
+            Server.PWCUrl = Reader.GetString(22);
 
             return Server;
         }
@@ -232,7 +275,15 @@ SELECT `game_server_id`,
         `private_server`,
         `module_description`,
         `module_url`,
-        `game_type`
+        `game_type`,
+        `minimum_level`,
+        `maximum_level`,
+        `pvp_level`,
+        `player_pause`,
+        `one_party_only`,
+        `elc_enforced`,
+        `ilr_enforced`,
+        `pwc_url`
     FROM `game_servers` ";
 
         /// <summary>

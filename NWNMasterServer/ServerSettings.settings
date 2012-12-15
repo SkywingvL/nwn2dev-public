@@ -32,5 +32,8 @@ http://www.atarisupport.com</Value>
     <Setting Name="MasterServerPort" Type="System.UInt32" Scope="User">
       <Value Profile="(Default)">6121</Value>
     </Setting>
+    <Setting Name="GameMode" Type="System.String" Scope="User">
+      <Value Profile="(Default)">NWN2</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

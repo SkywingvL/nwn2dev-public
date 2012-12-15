@@ -121,5 +121,17 @@ namespace NWNMasterServer {
                 this["MasterServerPort"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("NWN2")]
+        public string GameMode {
+            get {
+                return ((string)(this["GameMode"]));
+            }
+            set {
+                this["GameMode"] = value;
+            }
+        }
     }
 }

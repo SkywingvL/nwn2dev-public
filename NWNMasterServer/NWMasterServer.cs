@@ -1151,7 +1151,7 @@ namespace NWNMasterServer
 
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
 
-            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType);
+            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{1}' URL '{2}' has game type {3}.",
                 Sender,
@@ -1714,6 +1714,15 @@ namespace NWNMasterServer
             public string ModuleName;
             public UInt16 BuildNumber;
         }
+
+        /// <summary>
+        /// The game mode supported by the server.
+        /// </summary>
+        private enum GameMode
+        {
+            NWN1,
+            NWN2
+        }
         
         /// <summary>
         /// The underlying interface with the SCM.
@@ -1828,6 +1837,12 @@ namespace NWNMasterServer
         /// The default port number for the master server.
         /// </summary>
         private uint MasterServerPort = ServerSettings.Default.MasterServerPort;
+
+        /// <summary>
+        /// The game mode (e.g. protocol) that is supported by this server
+        /// instance, such as NWN1 or NWN2.
+        /// </summary>
+        private GameMode Mode = (GameMode)Enum.Parse(typeof(GameMode), ServerSettings.Default.GameMode);
 
         /// <summary>
         /// Timekeeping for query combining.

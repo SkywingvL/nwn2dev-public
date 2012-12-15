@@ -76,6 +76,16 @@ namespace NWN
         /// <returns>The list of supported product name values.</returns>
         [OperationContract]
         IList<string> GetSupportedProductList();
+
+        /// <summary>
+        /// Search the server database for a server by module, and return any
+        /// matching servers (zero or more).
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="Module">Supplies the server name.</param>
+        /// <returns>A list of matching servers is returned.</returns>
+        [OperationContract]
+        IList<NWGameServer> LookupServerByModule(string Product, string Module);
     }
 
     /// <summary>
@@ -180,5 +190,53 @@ namespace NWN
         /// </summary>
         [DataMember]
         public uint GameType { get; set; }
+
+        /// <summary>
+        /// The minimum supported character level on the server.
+        /// </summary>
+        [DataMember]
+        public uint MinimumLevel { get; set; }
+
+        /// <summary>
+        /// The maximum supported character level on the server.
+        /// </summary>
+        [DataMember]
+        public uint MaximumLevel { get; set; }
+
+        /// <summary>
+        /// The PVP level enabled on the server.
+        /// </summary>
+        [DataMember]
+        public uint PVPLevel { get; set; }
+
+        /// <summary>
+        /// True if players are permitted to pause the server.
+        /// </summary>
+        [DataMember]
+        public bool PlayerPause { get; set; }
+
+        /// <summary>
+        /// True if only one party is permitted on the server.
+        /// </summary>
+        [DataMember]
+        public bool OnePartyOnly { get; set; }
+
+        /// <summary>
+        /// True if ELC is enforced on the server.
+        /// </summary>
+        [DataMember]
+        public bool ELCEnforced { get; set; }
+
+        /// <summary>
+        /// True if ILR is enforced on the server.
+        /// </summary>
+        [DataMember]
+        public bool ILREnforced { get; set; }
+
+        /// <summary>
+        /// The persistent world client file URL for the server.
+        /// </summary>
+        [DataMember]
+        public string PWCUrl { get; set; }
     }
 }

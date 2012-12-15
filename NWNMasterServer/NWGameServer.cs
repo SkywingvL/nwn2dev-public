@@ -67,6 +67,9 @@ namespace NWNMasterServer
                 if (ModuleUrl == null)
                     ModuleUrl = "";
 
+                if (PWCUrl == null)
+                    PWCUrl = "";
+
                 string Query = String.Format(
 @"INSERT INTO `game_servers` (
     `game_server_id`,
@@ -84,7 +87,15 @@ namespace NWNMasterServer
     `private_server`,
     `module_description`,
     `module_url`,
-    `game_type`)
+    `game_type`,
+    `minimum_level`,
+    `maximum_level`,
+    `pvp_level`,
+    `player_pause`,
+    `one_party_only`,
+    `elc_enforced`,
+    `ilr_enforced`,
+    `pwc_url`)
 VALUES (
     {0},
     {1},
@@ -101,7 +112,15 @@ VALUES (
     {12},
     '{13}',
     '{14}',
-    {15})
+    {15},
+    {16},
+    {17},
+    {18},
+    {19},
+    {20},
+    {21},
+    {22},
+    '{23}')
 ON DUPLICATE KEY UPDATE 
     `expansions_mask` = {2},
     `build_number` = {3},
@@ -116,7 +135,15 @@ ON DUPLICATE KEY UPDATE
     `private_server` = {12},
     `module_description` = '{13}',
     `module_url` = '{14}',
-    `game_type` = {15}",
+    `game_type` = {15},
+    `minimum_level` = {16},
+    `maximum_level` = {17},
+    `pvp_level` = {18},
+    `player_pause` = {19},
+    `one_party_only` = {20},
+    `elc_enforced` = {21},
+    `ilr_enforced` = {22},
+    `pwc_url` = '{23}'",
                 DatabaseId,
                 MasterServer.ProductID,
                 ExpansionsMask,
@@ -132,7 +159,15 @@ ON DUPLICATE KEY UPDATE
                 PrivateServer,
                 MySqlHelper.EscapeString(ModuleDescription.Length > 256 ? ModuleDescription.Substring(0, 256) : ModuleDescription),
                 MySqlHelper.EscapeString(ModuleUrl.Length > 256 ? ModuleUrl.Substring(0, 256) : ModuleUrl),
-                GameType
+                GameType,
+                MinimumLevel,
+                MaximumLevel,
+                PVPLevel,
+                PlayerPause,
+                OnePartyOnly,
+                ELCEnforced,
+                ILREnforced,
+                MySqlHelper.EscapeString(PWCUrl.Length > 256 ? PWCUrl.Substring(0, 256) : PWCUrl)
                 );
 
                 MasterServer.ExecuteQueryNoReaderCombine(Query);
@@ -168,7 +203,15 @@ ON DUPLICATE KEY UPDATE
     `private_server`,
     `module_description`,
     `module_url`,
-    `game_type`
+    `game_type`,
+    `minimum_level`,
+    `maximum_level`,
+    `pvp_level`,
+    `player_pause`,
+    `one_party_only`,
+    `elc_enforced`,
+    `ilr_enforced`,
+    `pwc_url`
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `server_address` = '{1}'",
@@ -196,6 +239,14 @@ AND `server_address` = '{1}'",
                     ModuleDescription = Reader.GetString(12);
                     ModuleUrl = Reader.GetString(13);
                     GameType = Reader.GetUInt32(14);
+                    MinimumLevel = Reader.GetUInt32(15);
+                    MaximumLevel = Reader.GetUInt32(16);
+                    PVPLevel = Reader.GetUInt32(17);
+                    Server.PlayerPause = Reader.GetBoolean(18);
+                    Server.OnePartyOnly = Reader.GetBoolean(19);
+                    Server.ELCEnforced = Reader.GetBoolean(20);
+                    Server.ILREnforced = Reader.GetBoolean(21);
+                    PWCUrl = Reader.GetString(22);
                 }
             }
             catch (Exception e)
@@ -416,21 +467,35 @@ AND `server_address` = '{1}'",
             {
                 LastHeartbeat = Now;
 
-                if ((this.ExpansionsMask != Info.ExpansionsMask) ||
-                    (this.MaximumPlayerCount != Info.MaximumPlayers) ||
-                    (this.ActivePlayerCount != Info.ActivePlayers) ||
-                    (this.LocalVault != Info.IsLocalVault) ||
-                    (this.BuildNumber != Info.BuildNumber) ||
-                    (this.PrivateServer != Info.HasPlayerPassword) ||
-                    (this.ModuleName != Info.ModuleName))
+                if ((ExpansionsMask != Info.ExpansionsMask) ||
+                    (MaximumPlayerCount != Info.MaximumPlayers) ||
+                    (ActivePlayerCount != Info.ActivePlayers) ||
+                    (LocalVault != Info.IsLocalVault) ||
+                    (BuildNumber != Info.BuildNumber) ||
+                    (PrivateServer != Info.HasPlayerPassword) ||
+                    (ModuleName != Info.ModuleName) ||
+                    (MinimumLevel != Info.MinLevel) ||
+                    (MaximumLevel != Info.MaximumPlayers) ||
+                    (PVPLevel != Info.PVPLevel) ||
+                    (PlayerPause != Info.IsPlayerPauseAllowed) ||
+                    (OnePartyOnly != Info.IsOnePartyOnly) ||
+                    (ELCEnforced != Info.IsELC) ||
+                    (ILREnforced != Info.HasILR))
                 {
                     ExpansionsMask = Info.ExpansionsMask;
                     MaximumPlayerCount = Info.MaximumPlayers;
                     ActivePlayerCount = Info.ActivePlayers;
                     LocalVault = Info.IsLocalVault;
-                    this.PrivateServer = Info.HasPlayerPassword;
+                    PrivateServer = Info.HasPlayerPassword;
                     BuildNumber = Info.BuildNumber;
                     ModuleName = Info.ModuleName;
+                    MinimumLevel = Info.MinLevel;
+                    MaximumLevel = Info.MaxLevel;
+                    PVPLevel = Info.PVPLevel;
+                    PlayerPause = Info.IsPlayerPauseAllowed;
+                    OnePartyOnly = Info.IsOnePartyOnly;
+                    ELCEnforced = Info.IsELC;
+                    ILREnforced = Info.HasILR;
 
                     if (!Online)
                     {
@@ -485,7 +550,8 @@ AND `server_address` = '{1}'",
         /// description.</param>
         /// <param name="ModuleUrl">Supplies the new module url.</param>
         /// <param name="GameType">Supplies the new game type.</param>
-        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType)
+        /// <param name="PWCUrl">Supplies the new PWC url.</param>
+        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType, string PWCUrl)
         {
             DateTime Now = DateTime.UtcNow;
 
@@ -495,11 +561,13 @@ AND `server_address` = '{1}'",
 
                 if ((this.ModuleDescription != ModuleDescription) ||
                     (this.ModuleUrl != ModuleUrl) ||
-                    (this.GameType != GameType))
+                    (this.GameType != GameType) ||
+                    (this.PWCUrl != PWCUrl))
                 {
                     this.ModuleDescription = ModuleDescription;
                     this.ModuleUrl = ModuleUrl;
                     this.GameType = GameType;
+                    this.PWCUrl = PWCUrl;
 
                     if (!Online)
                     {
@@ -656,6 +724,46 @@ AND `server_address` = '{1}'",
         /// The game type (category).
         /// </summary>
         public uint GameType { get; set; }
+
+        /// <summary>
+        /// The PWC URL.
+        /// </summary>
+        public string PWCUrl { get; set; }
+
+        /// <summary>
+        /// The minimum acceptable character level.
+        /// </summary>
+        public uint MinimumLevel { get; set; }
+
+        /// <summary>
+        /// The maximum acceptable character level.
+        /// </summary>
+        public uint MaximumLevel { get; set; }
+
+        /// <summary>
+        /// The PVP level.
+        /// </summary>
+        public uint PVPLevel { get; set; }
+
+        /// <summary>
+        /// The player pause setting.
+        /// </summary>
+        public bool PlayerPause { get; set; }
+
+        /// <summary>
+        /// The one party only setting.
+        /// </summary>
+        public bool OnePartyOnly { get; set; }
+
+        /// <summary>
+        /// The ELC enforcement setting.
+        /// </summary>
+        public bool ELCEnforced;
+
+        /// <summary>
+        /// The ILR enforcement setting.
+        /// </summary>
+        public bool ILREnforced;
 
         /// <summary>
         /// The internal database ID of the server, or zero if the server has
