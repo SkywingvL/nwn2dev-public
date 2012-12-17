@@ -385,7 +385,10 @@ LIMIT 4096 ",
                             continue;
                         }
 
-                        MasterServer.SendServerInfoRequest(ServerAddress);
+                        NWGameServer Server = LookupServerByAddress(ServerAddress, false);
+
+                        if (Server == null || Server.Online == false)
+                            MasterServer.SendServerInfoRequest(ServerAddress);
                     }
                 }
 
