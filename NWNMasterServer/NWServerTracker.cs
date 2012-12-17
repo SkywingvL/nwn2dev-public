@@ -418,7 +418,8 @@ AND
         /// successfully received message from the server.
         /// </summary>
         //private const int SERVER_LIFETIME = 2 * 24 * 60 * 60;
-        private const int SERVER_LIFETIME = 4 * 60 * 60;
+        //private const int SERVER_LIFETIME = 4 * 60 * 60;
+        private const int SERVER_LIFETIME = 5 * 60;
 
         /// <summary>
         /// The minimum amount of time between which a live heartbeat causes a
