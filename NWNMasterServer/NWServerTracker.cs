@@ -38,6 +38,10 @@ namespace NWNMasterServer
         public NWServerTracker(NWMasterServer MasterServer)
         {
             this.MasterServer = MasterServer;
+            PendingGameServersSweepTimer = new System.Timers.Timer(PENDING_GAME_SERVER_SWEEP_INTERVAL);
+
+            PendingGameServersSweepTimer.AutoReset = true;
+            PendingGameServersSweepTimer.Elapsed += new System.Timers.ElapsedEventHandler(PendingGameServersSweepTimer_Elapsed);
 
             InitializeDatabase();
         }
@@ -87,6 +91,8 @@ namespace NWNMasterServer
         /// </summary>
         public void DrainHeartbeats()
         {
+            PendingGameServersSweepTimer.Stop();
+
             //
             // Prevent new requestors from spinning up new heartbeat requests.
             //
@@ -202,6 +208,15 @@ namespace NWNMasterServer
     INDEX (`product_id`, `online`, `module_name`)
     )");
 
+                MasterServer.ExecuteQueryNoReader(
+@"CREATE TABLE IF NOT EXISTS `pending_game_servers` (
+    `pending_game_server_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `product_id` int(10) UNSIGNED NOT NULL,
+    `server_address` varchar(128) NOT NULL,
+    PRIMARY KEY (`pending_game_server_id`),
+    UNIQUE KEY (`product_id`, `server_address`)
+    )");
+
                 string Query = String.Format(
 @"SELECT `game_server_id`,
     `expansions_mask`,
@@ -225,7 +240,7 @@ namespace NWNMasterServer
     `one_party_only`,
     `elc_enforced`,
     `ilr_enforced`,
-    `pwc_url`
+    `pwc_url` 
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `online` = true",
@@ -308,6 +323,96 @@ AND `online` = true",
         }
 
         /// <summary>
+        /// This timer callback runs when the pending game servers sweep timer
+        /// elapses.  It checks whether there is a pending query queue, and if
+        /// so, flushes it as appropriate.
+        /// </summary>
+        /// <param name="sender">Unused.</param>
+        /// <param name="e">Unused.</param>
+        private void PendingGameServersSweepTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            try
+            {
+                uint HighestPendingServerId = 0;
+                bool DataReturned = false;
+                string Query = String.Format(
+@"SELECT `pending_game_server_id`, 
+    `server_address` 
+FROM 
+    `pending_game_servers` 
+WHERE 
+    `product_id` = {0} 
+LIMIT 4096 ",
+                       MasterServer.ProductID);
+
+                using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
+                {
+                    while (Reader.Read())
+                    {
+                        uint PendingServerId = Reader.GetUInt32(0);
+                        string Hostname = Reader.GetString(1);
+                        int i = Hostname.IndexOf(':');
+                        IPEndPoint ServerAddress;
+
+                        if (HighestPendingServerId > PendingServerId)
+                            HighestPendingServerId = PendingServerId;
+
+                        if (DataReturned == false)
+                            DataReturned = true;
+
+                        if (i == -1)
+                        {
+                            Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Server {0} has invalid hostname '{1}'.",
+                                PendingServerId,
+                                Hostname);
+                            continue;
+                        }
+
+                        try
+                        {
+                            ServerAddress = new IPEndPoint(
+                                IPAddress.Parse(Hostname.Substring(0, i)),
+                                Convert.ToInt32(Hostname.Substring(i + 1)));
+                        }
+                        catch (Exception ex1)
+                        {
+                            Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Error initializing hostname {0} for server {1}: Exception: {2}",
+                                Hostname,
+                                PendingServerId,
+                                ex1);
+                            continue;
+                        }
+
+                        MasterServer.SendServerInfoRequest(ServerAddress);
+                    }
+                }
+
+                if (DataReturned)
+                {
+                    //
+                    // Remove records that have already been processed.
+                    //
+
+                    MasterServer.ExecuteQueryNoReader(String.Format(
+@"DELETE FROM 
+    `pending_game_servers` 
+WHERE 
+    `product_id` = {0} 
+AND 
+    `pending_game_server_id` < {1}",
+                                   MasterServer.ProductID,
+                                   HighestPendingServerId + 1));
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Exception processing pending servers list: {0}.", ex);
+            }
+        }
+
+
+        /// <summary>
         /// The maximum lifetime, in seconds, for a server to be considered
         /// active (for purposes of sending a heartbeat ping), since the last
         /// successfully received message from the server.
@@ -321,6 +426,12 @@ AND `online` = true",
         /// the absence of any other events occuring.
         /// </summary>
         private const int HEARTBEAT_SAVE = 60;
+
+        /// <summary>
+        /// The interval, in milliseconds, after which the pending_game_servers
+        /// table is scanned for servers to enqueue.
+        /// </summary>
+        private const int PENDING_GAME_SERVER_SWEEP_INTERVAL = 5 * 60 * 1000;
 
         /// <summary>
         /// The heartbeat cutoff time span, derived from SERVER_LIFETIME and
@@ -354,5 +465,12 @@ AND `online` = true",
         /// The heartbeat lock.
         /// </summary>
         private object HeartbeatLock = new object();
+
+        /// <summary>
+        /// The timer used to trigger periodic scans of the
+        /// pending_game_servers table for pulling in new server records from
+        /// the web service API.
+        /// </summary>
+        private System.Timers.Timer PendingGameServersSweepTimer = null;
     }
 }

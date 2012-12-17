@@ -982,13 +982,21 @@ namespace NWNMasterServer
             if (!Parser.ReadWORD(out DataPort))
                 return;
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
 
             //
             // Record module activity.
             //
 
-            Server.RecordActivity();
+            if (Server != null)
+            {
+                Server.RecordActivity();
+            }
+            else
+            {
+                SendServerInfoRequest(Sender);
+            }
+
             SendMstStatusResponse(Sender, MstStatus.MST_STATUS_ONLINE);
         }
 
