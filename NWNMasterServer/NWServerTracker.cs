@@ -40,7 +40,7 @@ namespace NWNMasterServer
             this.MasterServer = MasterServer;
             PendingGameServersSweepTimer = new System.Timers.Timer(PENDING_GAME_SERVER_SWEEP_INTERVAL);
 
-            PendingGameServersSweepTimer.AutoReset = true;
+            PendingGameServersSweepTimer.AutoReset = false;
             PendingGameServersSweepTimer.Elapsed += new System.Timers.ElapsedEventHandler(PendingGameServersSweepTimer_Elapsed);
 
             InitializeDatabase();
@@ -82,6 +82,8 @@ namespace NWNMasterServer
             }
 
             Logger.Log(LogLevel.Normal, "NWServerTracker.QueueInitialHeartbeats(): Queued {0} initial server heartbeat requests.", HeartbeatsStarted);
+
+            PendingGameServersSweepTimer.Start();
         }
 
         /// <summary>
@@ -408,6 +410,14 @@ AND
             catch (Exception ex)
             {
                 Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Exception processing pending servers list: {0}.", ex);
+            }
+
+            if (!HeartbeatsEnabled)
+                return;
+
+            lock (HeartbeatLock)
+            {
+                PendingGameServersSweepTimer.Start();
             }
         }
 
