@@ -356,7 +356,7 @@ LIMIT 4096 ",
                         int i = Hostname.IndexOf(':');
                         IPEndPoint ServerAddress;
 
-                        if (HighestPendingServerId > PendingServerId)
+                        if (PendingServerId > HighestPendingServerId)
                             HighestPendingServerId = PendingServerId;
 
                         if (DataReturned == false)

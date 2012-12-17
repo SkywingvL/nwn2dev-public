@@ -86,6 +86,18 @@ namespace NWN
         /// <returns>A list of matching servers is returned.</returns>
         [OperationContract]
         IList<NWGameServer> LookupServerByModule(string Product, string Module);
+
+        /// <summary>
+        /// Register a list of pending servers with the master server
+        /// infrastructure, so that they will be queued for inspection as
+        /// active game servers.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="ServerAddresses">Supplies the list of server addresses
+        /// to register, up to 50 ip:port pairs accepted.</param>
+        /// <returns>The count of servers processed.</returns>
+        [OperationContract]
+        uint RegisterPendingServers(string Product, string[] ServerAddresses);
     }
 
     /// <summary>

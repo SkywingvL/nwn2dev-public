@@ -21,6 +21,7 @@ using System.ServiceModel.Web;
 using System.Text;
 using MySql.Data.MySqlClient;
 using System.Configuration;
+using System.Net;
 
 namespace NWN
 {
@@ -201,6 +202,89 @@ namespace NWN
 
             return Servers;
         }
+
+        /// <summary>
+        /// Register a list of pending servers with the master server
+        /// infrastructure, so that they will be queued for inspection as
+        /// active game servers.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="ServerAddresses">Supplies the list of server addresses
+        /// to register, up to 50 ip:port pairs accepted.</param>
+        /// <returns>The count of servers processed.</returns>
+        public uint RegisterPendingServers(string Product, string[] ServerAddresses)
+        {
+            int ProductId;
+            uint Processed;
+
+            if (ServerAddresses == null || ServerAddresses.Length == 0 || ServerAddresses.Length > 50)
+                return 0;
+
+            if (Product == null)
+                return 0;
+
+            ProductId = ProductNameToId(Product);
+
+            if (ProductId == 0)
+                return 0;
+
+            //
+            // Process each server in the request list by inserting it into the
+            // pending_game_servers table.  The server address is round-tripped
+            // through the IPAddress parser to ensure that it can be properly
+            // handled by the master server service.
+            //
+
+            StringBuilder Query = new StringBuilder();
+            Processed = 0;
+
+            foreach (string Address in ServerAddresses)
+            {
+                int i = Address.IndexOf(':');
+                IPEndPoint ServerAddress;
+
+                if (i == -1)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    ServerAddress = new IPEndPoint(
+                        IPAddress.Parse(Address.Substring(0, i)),
+                        Convert.ToInt32(Address.Substring(i + 1)));
+                }
+                catch
+                {
+                    continue;
+                }
+
+                Query.AppendFormat(
+@"INSERT INTO `pending_game_servers` (
+    `pending_game_server_id`,
+    `product_id`,
+    `server_address`)
+VALUES (
+    0,
+    {0},
+    '{1}')
+ON DUPLICATE KEY UPDATE
+    `pending_game_server_id` = `pending_game_server_id`;",
+                    ProductId,
+                    MySqlHelper.EscapeString(ServerAddress.ToString()));
+                Processed += 1;
+            }
+
+            if (Processed > 0)
+            {
+                using (MySqlDataReader Reader = MySqlHelper.ExecuteReader(ConnectionString, Query.ToString()))
+                {
+                }
+            }
+
+            return Processed;
+        }
+
 
         /// <summary>
         /// Read server parameters from the standard database query column
