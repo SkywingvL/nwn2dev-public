@@ -255,6 +255,70 @@ AND `server_address` = '{1}'",
             }
         }
 
+        /// <summary>
+        /// This method attempts to determine whether a different server, homed
+        /// at the same address, is a "NAT duplicate" of the current server.
+        ///
+        /// Some broken NAT devices will pick an ephemeral source port for the
+        /// master heartbeat ping, and will (for a short time) even respond on
+        /// this port, even though they also respond on the declared server
+        /// internal port, which is the canonical address to select.
+        ///
+        /// However, it is legitimate for two different servers to reside at
+        /// different ports on the same IP address.  In order to distinguish
+        /// between these conditions, a test is made as to whether the data set
+        /// returned by a BNXR message from both servers is identical, for the
+        /// configuration settings.  If so, then a NAT duplicate is declared,
+        /// otherwise both servers are considered to be legitimately distinct.
+        /// 
+        /// In the condition where a NAT duplicate is detected, the internal
+        /// advertised address of the server is assumed to be the canonical
+        /// address.  In such a case, the InternalServer argument corresponds
+        /// to the canonical server, and the this pointer corresponds to the
+        /// NAT duplicate.  The NAT duplicate is marked offline and its
+        /// heartbeat is then descheduled.
+        /// </summary>
+        /// <param name="InternalServer">Supplies the potential canonical half
+        /// of a NAT duplicate server, to be compared against.</param>
+        /// <returns>True if the current server was marked offline as a NAT
+        /// duplicate.</returns>
+        public bool CheckForNATDuplicate(NWGameServer InternalServer)
+        {
+            lock (this)
+            {
+                lock (InternalServer)
+                {
+                    if ((ModuleName == InternalServer.ModuleName) &&
+                        (PrivateServer == InternalServer.PrivateServer) &&
+                        (MinimumLevel == InternalServer.MinimumLevel) &&
+                        (MaximumLevel == InternalServer.MaximumLevel) &&
+                        (MaximumPlayerCount == InternalServer.MaximumPlayerCount) &&
+                        (LocalVault == InternalServer.LocalVault) &&
+                        (PVPLevel == InternalServer.PVPLevel) &&
+                        (PlayerPause == InternalServer.PlayerPause) &&
+                        (OnePartyOnly == InternalServer.OnePartyOnly) &&
+                        (ELCEnforced == InternalServer.ELCEnforced) &&
+                        (ILREnforced == InternalServer.ILREnforced) &&
+                        (ExpansionsMask != InternalServer.ExpansionsMask))
+                    {
+                        NATDuplicateTick = (uint)Environment.TickCount;
+
+                        if (Online)
+                        {
+                            Online = false;
+                            StopHeartbeat();
+                        }
+
+                        Save();
+
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
 
         /// <summary>
         /// Start the periodic heartbeat, if it is not already running.  The
@@ -312,9 +376,8 @@ AND `server_address` = '{1}'",
                 }
                 else
                 {
-                    Online = true;
-                    StartHeartbeat();
-                    Save();
+                    if (MarkServerOnline())
+                        Save();
                 }
             }
         }
@@ -344,9 +407,9 @@ AND `server_address` = '{1}'",
 
                 if (!Online)
                 {
-                    Online = true;
                     ActivePlayerCount = PlayerCount;
-                    StartHeartbeat();
+
+                    MarkServerOnline();
                     Save();
                 }
                 else if (ActivePlayerCount != PlayerCount)
@@ -404,10 +467,7 @@ AND `server_address` = '{1}'",
                     ActivePlayerCount = 0;
 
                     if (!Online)
-                    {
-                        Online = true;
-                        StartHeartbeat();
-                    }
+                        MarkServerOnline();
 
                     Save();
                 }
@@ -440,10 +500,7 @@ AND `server_address` = '{1}'",
                     this.ModuleName = ModuleName;
 
                     if (!Online)
-                    {
-                        Online = true;
-                        StartHeartbeat();
-                    }
+                        MarkServerOnline();
 
                     Save();
                 }
@@ -498,10 +555,7 @@ AND `server_address` = '{1}'",
                     ILREnforced = Info.HasILR;
 
                     if (!Online)
-                    {
-                        Online = true;
-                        StartHeartbeat();
-                    }
+                        MarkServerOnline();
 
                     Save();
                 }
@@ -529,10 +583,7 @@ AND `server_address` = '{1}'",
                     this.ServerName = ServerName;
 
                     if (!Online)
-                    {
-                        Online = true;
-                        StartHeartbeat();
-                    }
+                        MarkServerOnline();
 
                     Save();
                 }
@@ -573,10 +624,7 @@ AND `server_address` = '{1}'",
                     this.BuildNumber = BuildNumber;
 
                     if (!Online)
-                    {
-                        Online = true;
-                        StartHeartbeat();
-                    }
+                        MarkServerOnline();
 
                     Save();
                 }
@@ -597,6 +645,27 @@ AND `server_address` = '{1}'",
 
             if ((Now - LastSaveTick) >= TIMESAVE_INTERVAL)
                 Save();
+        }
+
+        /// <summary>
+        /// Attempt to mark a server as online, scheduling a heartbeat unless
+        /// the server is already considered a NAT duplicate.
+        /// </summary>
+        /// <returns>True if the server was actually marked online.</returns>
+        private bool MarkServerOnline()
+        {
+            uint Now = (uint)Environment.TickCount;
+
+            if ((Now - NATDuplicateTick) >= NAT_DUPLICATE_INTERVAL)
+            {
+                Online = true;
+                StartHeartbeat();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -797,6 +866,13 @@ AND `server_address` = '{1}'",
         /// </summary>
         private const uint TIMESAVE_INTERVAL = 15 * 60 * 1000;
 
+        /// <summary>
+        /// The interval, in milliseconds, at which the server object is
+        /// blacklisted and prevented from coming back online if it was marked
+        /// as a NAT duplicate.
+        /// </summary>
+        private const uint NAT_DUPLICATE_INTERVAL = (4 * HEARTBEAT_INTERVAL);
+
 
         /// <summary>
         /// The address of the server.
@@ -822,5 +898,10 @@ AND `server_address` = '{1}'",
         /// The last tick that a timesave occurred at.
         /// </summary>
         private uint LastSaveTick = (uint)Environment.TickCount - TIMESAVE_INTERVAL;
+
+        /// <summary>
+        /// The time at which at NAT duplicate was detected.
+        /// </summary>
+        private uint NATDuplicateTick = (uint)Environment.TickCount - NAT_DUPLICATE_INTERVAL;
     }
 }

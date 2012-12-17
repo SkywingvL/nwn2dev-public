@@ -985,7 +985,10 @@ namespace NWNMasterServer
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
 
             //
-            // Record module activity.
+            // Record module activity if this is a repeated contact from this
+            // server.  Otherwise, attempt to discover the actual port number
+            // for the server, while attempting to compensate for a broken NAT
+            // device.
             //
 
             if (Server != null)
@@ -994,6 +997,25 @@ namespace NWNMasterServer
             }
             else
             {
+                //
+                // Do not enter the server into the server list until
+                // bidirectional communication has been established.  However,
+                // some broken NATs may respond briefly to the current source
+                // port and then choose another (different!) source port later
+                // for future pings.  To handle this case, send a BNXI probe to
+                // both internal and external addresses.  If the responses are
+                // the same, then assume that the server is actually located at
+                // the internal address; otherwise, create server records for
+                // both servers.
+                //
+
+                if (DataPort != (UInt16)Sender.Port)
+                {
+                    IPEndPoint InternalAddress = new IPEndPoint(Sender.Address, (int)DataPort);
+
+                    SendServerInfoRequest(InternalAddress);
+                }
+
                 SendServerInfoRequest(Sender);
             }
 
@@ -1103,9 +1125,58 @@ namespace NWNMasterServer
 
             //
             // Look up the server and update the current server information.
+            // Since the BNXR reply is used to differentiate between broken
+            // NATs and endpoints with multiple servers on the same IP address,
+            // carefully check for whether a duplicate server record exists on
+            // the server internal port before creating a new server record.
             //
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+            NWGameServer Server;
+
+            Server = ServerTracker.LookupServerByAddress(Sender);
+
+            if (DataPort == (UInt16)Sender.Port)
+            {
+                //
+                // Both internal and external ports match; the sender is not
+                // likely behind a NAT.  No action is necessary behind the
+                // creation of the server record above.
+                //
+            }
+            else
+            {
+                NWGameServer ServerInternal;
+                IPEndPoint InternalAddress = new IPEndPoint(Sender.Address, (int)DataPort);
+                
+                ServerInternal = ServerTracker.LookupServerByAddress(InternalAddress, false);
+
+                if (ServerInternal == null)
+                {
+                    //
+                    // No record of a server existing at the internal address
+                    // is yet known.  Proceed to create the server record at
+                    // the external address (as was already performed above).
+                    //
+                }
+                else
+                {
+                    //
+                    // A record exists for both internal and external
+                    // addresses for the server.  If the configuration values
+                    // between both servers are the same, then mark the
+                    // external address version as offline and prefer the
+                    // internal server address as authoritative (since it must
+                    // be globally reachable for a response to have been
+                    // received).
+                    //
+
+                    if (ServerInternal.CheckForNATDuplicate(Server))
+                    {
+                        Logger.Log(LogLevel.Normal, "NWMasterServer.OnRecvServerInfoResponse(): Removing NAT duplicate server {0} in preference of server {1}.", Sender, InternalAddress);
+                        return;
+                    }
+                }
+            }
 
             if (Mode != GameMode.NWN2)
                 Info.BuildNumber = Server.BuildNumber;
