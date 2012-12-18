@@ -285,6 +285,111 @@ ON DUPLICATE KEY UPDATE
             return Processed;
         }
 
+        /// <summary>
+        /// Search the server database for a server by game type, and return
+        /// any matching servers (zero or more).
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="GameType">Supplies the GameType code to search by.</param>
+        /// <returns>A list of matching servers is returned.</returns>
+        public IList<NWGameServer> LookupServerByGameType(string Product, uint GameType)
+        {
+            List<NWGameServer> Servers = new List<NWGameServer>();
+
+            string Query = String.Format(
+                StandardServerQueryPrefix +
+    @"WHERE `product_id` = {0}
+    AND `online` = true
+    AND `game_type` = '{1}'
+    ",
+            ProductNameToId(Product),
+            GameType);
+
+            using (MySqlDataReader Reader = MySqlHelper.ExecuteReader(ConnectionString, Query))
+            {
+                while (Reader.Read())
+                {
+                    NWGameServer Server = LoadGameServerFromQuery(Reader);
+
+                    Server.Product = Product;
+
+                    Servers.Add(Server);
+                }
+            }
+
+            return Servers;
+        }
+
+        /// <summary>
+        /// Get the Client Extension update and message of the day information.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="ClientExtensionVersion">Supplies the Client Extension
+        /// version number in packed format.</param>
+        /// <returns>The message of the day string, else an empty string if
+        /// there was no string to display.</returns>
+        public ClientExtensionUpdate GetClientExtensionUpdate(string Product, uint ClientExtensionVersion)
+        {
+            int ProductId = ProductNameToId(Product);
+            ClientExtensionUpdate UpdateInfo = new ClientExtensionUpdate();
+            string ClientVersion = String.Format("{0}.{1}.{2}.{3}",
+                (ClientExtensionVersion >> 24) & 0xFF,
+                (ClientExtensionVersion >> 16) & 0xFF,
+                (ClientExtensionVersion >> 8) & 0xFF,
+                (ClientExtensionVersion >> 0) & 0xFF);
+
+            UpdateInfo.MOTD = "";
+            UpdateInfo.UpdateUrl = "";
+            UpdateInfo.UpdateVersion = "";
+            UpdateInfo.InfoUrl = "";
+            UpdateInfo.UpdateDescription = "";
+
+            //
+            // Gather the current Client Extension update information from the
+            // database.
+            //
+
+            string Query = String.Format(
+@"SELECT 
+    `update_message`, 
+    `update_url`, 
+    `update_info_url`, 
+    `update_version`, 
+    `update_motd` 
+FROM 
+    `client_extension_update` 
+WHERE 
+    `product_id` = {0}",
+                       ProductId);
+
+            using (MySqlDataReader Reader = MySqlHelper.ExecuteReader(ConnectionString, Query))
+            {
+                if (Reader.Read())
+                {
+                    UpdateInfo.UpdateDescription = Reader.GetString(0);
+                    UpdateInfo.UpdateUrl = Reader.GetString(1);
+                    UpdateInfo.InfoUrl = Reader.GetString(2);
+                    UpdateInfo.UpdateVersion = Reader.GetString(3);
+                    UpdateInfo.MOTD = Reader.GetString(4);
+                }
+            }
+
+            //
+            // If the client is already running the recommended version, then
+            // do not signal an update request to the client.
+            //
+
+            if (UpdateInfo.UpdateVersion == ClientVersion)
+            {
+                UpdateInfo.UpdateDescription = "";
+                UpdateInfo.UpdateVersion = "";
+                UpdateInfo.InfoUrl = "";
+                UpdateInfo.UpdateUrl = "";
+            }
+
+            return UpdateInfo;
+        }
+
 
         /// <summary>
         /// Read server parameters from the standard database query column

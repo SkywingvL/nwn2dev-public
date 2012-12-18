@@ -207,7 +207,8 @@ namespace NWNMasterServer
     UNIQUE KEY (`product_id`, `server_address`),
     INDEX (`product_id`, `online`),
     INDEX (`product_id`, `online`, `server_name`),
-    INDEX (`product_id`, `online`, `module_name`)
+    INDEX (`product_id`, `online`, `module_name`),
+    INDEX (`product_id`, `online`, `game_type`)
     )");
 
                 MasterServer.ExecuteQueryNoReader(
@@ -217,6 +218,18 @@ namespace NWNMasterServer
     `server_address` varchar(128) NOT NULL,
     PRIMARY KEY (`pending_game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`)
+    )");
+
+                MasterServer.ExecuteQueryNoReader(
+@"CREATE TABLE IF NOT EXISTS `client_extension_update` (
+    `update_id` int(10) UNSIGNED NOT NULL,
+    `product_id` int(10) UNSIGNED NOT NULL,
+    `update_message` varchar(4096) NOT NULL,
+    `update_url` varchar(4096) NOT NULL,
+    `update_info_url` varchar(4096) NOT NULL,
+    `update_version` varchar(128) NOT NULL,
+    `update_motd` varchar(4096) NOT NULL,
+    PRIMARY KEY (`update_id`)
     )");
 
                 string Query = String.Format(

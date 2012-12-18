@@ -98,6 +98,27 @@ namespace NWN
         /// <returns>The count of servers processed.</returns>
         [OperationContract]
         uint RegisterPendingServers(string Product, string[] ServerAddresses);
+
+        /// <summary>
+        /// Search the server database for a server by game type, and return
+        /// any matching servers (zero or more).
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="GameType">Supplies the GameType code to search by.</param>
+        /// <returns>A list of matching servers is returned.</returns>
+        [OperationContract]
+        IList<NWGameServer> LookupServerByGameType(string Product, uint GameType);
+
+        /// <summary>
+        /// Get the Client Extension update and message of the day information.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="ClientExtensionVersion">Supplies the Client Extension
+        /// version number in packed format.</param>
+        /// <returns>The message of the day string, else an empty string if
+        /// there was no string to display.</returns>
+        [OperationContract]
+        ClientExtensionUpdate GetClientExtensionUpdate(string Product, uint ClientExtensionVersion);
     }
 
     /// <summary>
@@ -250,5 +271,50 @@ namespace NWN
         /// </summary>
         [DataMember]
         public string PWCUrl { get; set; }
+    }
+
+    /// <summary>
+    /// This class represents update and message of the day parameters for the
+    /// NWN2 Client Extension.
+    /// </summary>
+    [DataContract]
+    public class ClientExtensionUpdate
+    {
+        /// <summary>
+        /// The non-update message of the day to display, or an empty string if
+        /// no message should be shown.  The message is shown on CE attach, or
+        /// client startup.
+        /// </summary>
+        [DataMember]
+        public string MOTD { get; set; }
+
+        /// <summary>
+        /// The download URL for an available update, or an empty string if no
+        /// update should be pushed to the client.  Only used if UpdateVersion
+        /// is set.
+        /// </summary>
+        [DataMember]
+        public string UpdateUrl { get; set; }
+
+        /// <summary>
+        /// The version number of the new Client Extension version that is now
+        /// available, or an empty string if no new update is available.
+        /// </summary>
+        [DataMember]
+        public string UpdateVersion { get; set; }
+
+        /// <summary>
+        /// An informational URL to show to the client for an update, instead
+        /// of an automatic update.  Only used if UpdateVersion is set and
+        /// UpdateUrl is empty, or if the update fails.
+        /// </summary>
+        [DataMember]
+        public string InfoUrl { get; set; }
+
+        /// <summary>
+        /// A human-readable description to display for the new update message.
+        /// </summary>
+        [DataMember]
+        public string UpdateDescription { get; set; }
     }
 }
