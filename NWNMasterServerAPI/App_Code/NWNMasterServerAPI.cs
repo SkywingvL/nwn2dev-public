@@ -242,6 +242,7 @@ namespace NWN
             {
                 int i = Address.IndexOf(':');
                 IPEndPoint ServerAddress;
+                UInt32 IPv4Address;
 
                 if (i == -1)
                 {
@@ -250,9 +251,37 @@ namespace NWN
 
                 try
                 {
+                    byte[] AddressBytes;
                     ServerAddress = new IPEndPoint(
                         IPAddress.Parse(Address.Substring(0, i)),
                         Convert.ToInt32(Address.Substring(i + 1)));
+
+                    if (ServerAddress.Port <= 0 || ServerAddress.Port > 0xFFFF)
+                        continue;
+
+                    AddressBytes = ServerAddress.Address.GetAddressBytes();
+
+                    if (AddressBytes.Length != 4)
+                        continue;
+
+                    IPv4Address = 0;
+                    IPv4Address |= (UInt32)AddressBytes[0] << 24;
+                    IPv4Address |= (UInt32)AddressBytes[1] << 16;
+                    IPv4Address |= (UInt32)AddressBytes[2] << 8;
+                    IPv4Address |= (UInt32)AddressBytes[3] << 0;
+
+                    //
+                    // Disallow localhost, RFC 1918, and multicast addresses.
+                    //
+
+                    if (((IPv4Address & 0xFF000000) == 0x7F000000) ||
+                        ((IPv4Address & 0xFF000000) == 0x0A000000) ||
+                        ((IPv4Address & 0xFFF00000) == 0xAC100000) ||
+                        ((IPv4Address & 0xFFFF0000) == 0xC0A80000) ||
+                        ((IPv4Address & 0xF0000000) == 0xE0000000))
+                    {
+                        continue;
+                    }
                 }
                 catch
                 {
