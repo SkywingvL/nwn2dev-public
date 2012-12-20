@@ -119,6 +119,20 @@ namespace NWN
         /// there was no string to display.</returns>
         [OperationContract]
         ClientExtensionUpdate GetClientExtensionUpdate(string Product, uint ClientExtensionVersion);
+
+        /// <summary>
+        /// Search the server database for a server by game type, and return
+        /// any matching servers (zero or more).  This private API is intended
+        /// for use by the Client Extension so that the results may be tailored
+        /// to a particular Client Extension version if necessary.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="GameType">Supplies the GameType code to search by.</param>
+        /// <param name="ClientExtensionVersion">Supplies the Client Extension
+        /// version number in packed format.</param>
+        /// <returns>A list of matching servers is returned.</returns>
+        [OperationContract]
+        IList<NWGameServer> LookupServerByGameTypeClientExtension(string Product, uint GameType, uint ClientExtensionVersion);
     }
 
     /// <summary>
