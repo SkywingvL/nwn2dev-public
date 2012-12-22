@@ -435,6 +435,44 @@ WHERE
             return LookupServerByGameType(Product, GameType);
         }
 
+        /// <summary>
+        /// Increment a Client Extension statistic.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="Statistic">Supplies the statistic name.</param>
+        /// <returns>Reserved for future use; zero at present.</returns>
+        public uint IncrementStatistic(string Product, string Statistic)
+        {
+            int ProductId = ProductNameToId(Product);
+
+            if ((ProductId == 0) || (Statistic.Length > 64))
+                return 0;
+
+            DateTime Now = DateTime.UtcNow;
+            string Query = String.Format(
+@"INSERT INTO  
+    `stat_counters` (
+    `stat_counter_name`, 
+    `stat_counter_value`, 
+    `stat_counter_last_update`) 
+VALUES ( 
+    '{0}',
+    1,
+    '{1}') 
+ON DUPLICATE KEY UPDATE 
+    `stat_counter_name` = '{0}', 
+    `stat_counter_value` = `stat_counter_value` + 1, 
+    `stat_counter_last_update` = '{1}'",
+                                       MySqlHelper.EscapeString(Statistic),
+                                       DateToSQLDate(Now));
+
+            using (MySqlDataReader Reader = MySqlHelper.ExecuteReader(ConnectionString, Query))
+            {
+            }
+
+            return 0;
+        }
+
 
         /// <summary>
         /// Read server parameters from the standard database query column
@@ -488,6 +526,22 @@ WHERE
                 return 1;
             else
                 return 0;
+        }
+
+        /// <summary>
+        /// Convert a DateTime to MySQL-compatible format.
+        /// </summary>
+        /// <param name="Date">The date to convert.</param>
+        /// <returns>The MySQL-compatible date string.</returns>
+        private string DateToSQLDate(DateTime Date)
+        {
+            return String.Format("{0:D4}-{1:D2}-{2:D2} {3:D2}:{4:D2}:{5:D2}",
+                Date.Year,
+                Date.Month,
+                Date.Day,
+                Date.Hour,
+                Date.Minute,
+                Date.Second);
         }
 
         /// <summary>

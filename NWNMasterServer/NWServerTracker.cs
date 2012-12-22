@@ -232,6 +232,14 @@ namespace NWNMasterServer
     PRIMARY KEY (`update_id`)
     )");
 
+                MasterServer.ExecuteQueryNoReader(
+@"CREATE TABLE IF NOT EXISTS `stat_counters` (
+    `stat_counter_name` varchar(64) NOT NULL,
+    `stat_counter_value` int(10) UNSIGNED NOT NULL,
+    `stat_counter_last_update` datetime NOT NULL,
+    PRIMARY KEY (`stat_counter_name`)
+    )");
+
                 string Query = String.Format(
 @"SELECT `game_server_id`,
     `expansions_mask`,

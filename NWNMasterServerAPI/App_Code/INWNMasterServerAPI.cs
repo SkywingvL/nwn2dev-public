@@ -133,6 +133,15 @@ namespace NWN
         /// <returns>A list of matching servers is returned.</returns>
         [OperationContract]
         IList<NWGameServer> LookupServerByGameTypeClientExtension(string Product, uint GameType, uint ClientExtensionVersion);
+
+        /// <summary>
+        /// Increment a Client Extension statistic.
+        /// </summary>
+        /// <param name="Product">Supplies the product name, such as NWN2.</param>
+        /// <param name="Statistic">Supplies the statistic name.</param>
+        /// <returns>Reserved for future use; zero at present.</returns>
+        [OperationContract]
+        uint IncrementStatistic(string Product, string Statistic);
     }
 
     /// <summary>
