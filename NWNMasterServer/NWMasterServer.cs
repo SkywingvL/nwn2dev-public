@@ -667,6 +667,7 @@ namespace NWNMasterServer
             CDKeyInfo CDKeyHash;
             string AccountName;
             int KeyIndex;
+            int PortNumberHbo;
 
             if (!Parser.ReadWORD(out DataPort))
                 return;
@@ -679,7 +680,12 @@ namespace NWNMasterServer
             if (!Parser.ReadWORD(out ClientPort))
                 return;
 
-            IPEndPoint ClientEndpoint = new IPEndPoint((long)ClientIP, IPAddress.NetworkToHostOrder((int)ClientPort));
+            PortNumberHbo = IPAddress.NetworkToHostOrder(ClientPort);
+
+            if ((PortNumberHbo == 0) || ((PortNumberHbo & 0xFFFF) != PortNumberHbo))
+                PortNumberHbo = 5120;
+
+            IPEndPoint ClientEndpoint = new IPEndPoint((long)ClientIP, PortNumberHbo);
 
             if (!Parser.ReadWORD(out Length))
                 return;
