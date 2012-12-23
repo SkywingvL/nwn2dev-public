@@ -466,7 +466,7 @@ AND `online` = false
 AND `last_heartbeat` >= '{2}' 
 GROUP BY `game_server_id` 
 ORDER BY `game_server_id` 
-LIMIT 25",
+LIMIT 50",
                     MasterServer.ProductID,
                     ScavengeServerId,
                     MasterServer.DateToSQLDate(Now.Subtract(ScavengerTimeSpan)));
@@ -576,7 +576,7 @@ LIMIT 25",
         /// is next iterated through for a selection of servers to re-ping for
         /// the background scavenger.
         /// </summary>
-        private const int SCAVENGE_SWEEP_INTERVAL = 8 * 60 * 60 * 1000;
+        private const int SCAVENGE_SWEEP_INTERVAL = 1 * 60 * 60 * 1000;
 
         /// <summary>
         /// The number of days that a server will be periodically re-pinged by
