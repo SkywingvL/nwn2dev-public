@@ -38,10 +38,14 @@ namespace NWNMasterServer
         public NWServerTracker(NWMasterServer MasterServer)
         {
             this.MasterServer = MasterServer;
-            PendingGameServersSweepTimer = new System.Timers.Timer(PENDING_GAME_SERVER_SWEEP_INTERVAL);
 
+            PendingGameServersSweepTimer = new System.Timers.Timer(PENDING_GAME_SERVER_SWEEP_INTERVAL);
             PendingGameServersSweepTimer.AutoReset = false;
             PendingGameServersSweepTimer.Elapsed += new System.Timers.ElapsedEventHandler(PendingGameServersSweepTimer_Elapsed);
+
+            ScavengerSweepTimer = new System.Timers.Timer(SCAVENGE_SWEEP_INTERVAL);
+            ScavengerSweepTimer.AutoReset = false;
+            ScavengerSweepTimer.Elapsed += new System.Timers.ElapsedEventHandler(ScavengerSweepTimer_Elapsed);
 
             InitializeDatabase();
         }
@@ -84,6 +88,7 @@ namespace NWNMasterServer
             Logger.Log(LogLevel.Normal, "NWServerTracker.QueueInitialHeartbeats(): Queued {0} initial server heartbeat requests.", HeartbeatsStarted);
 
             PendingGameServersSweepTimer.Start();
+            ScavengerSweepTimer.Start();
         }
 
         /// <summary>
@@ -94,6 +99,7 @@ namespace NWNMasterServer
         public void DrainHeartbeats()
         {
             PendingGameServersSweepTimer.Stop();
+            ScavengerSweepTimer.Stop();
 
             //
             // Prevent new requestors from spinning up new heartbeat requests.
@@ -365,7 +371,9 @@ FROM
     `pending_game_servers` 
 WHERE 
     `product_id` = {0} 
-LIMIT 4096 ",
+GROUP BY `pending_game_server_id` 
+ORDER BY `pending_game_server_id` 
+LIMIT 100 ",
                        MasterServer.ProductID);
 
                 using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
@@ -374,7 +382,6 @@ LIMIT 4096 ",
                     {
                         uint PendingServerId = Reader.GetUInt32(0);
                         string Hostname = Reader.GetString(1);
-                        int i = Hostname.IndexOf(':');
                         IPEndPoint ServerAddress;
 
                         if (PendingServerId > HighestPendingServerId)
@@ -383,26 +390,12 @@ LIMIT 4096 ",
                         if (DataReturned == false)
                             DataReturned = true;
 
-                        if (i == -1)
+                        ServerAddress = ConvertServerHostnameToIPEndPoint(Hostname);
+                        if (ServerAddress == null)
                         {
                             Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Server {0} has invalid hostname '{1}'.",
                                 PendingServerId,
                                 Hostname);
-                            continue;
-                        }
-
-                        try
-                        {
-                            ServerAddress = new IPEndPoint(
-                                IPAddress.Parse(Hostname.Substring(0, i)),
-                                Convert.ToInt32(Hostname.Substring(i + 1)));
-                        }
-                        catch (Exception ex1)
-                        {
-                            Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Error initializing hostname {0} for server {1}: Exception: {2}",
-                                Hostname,
-                                PendingServerId,
-                                ex1);
                             continue;
                         }
 
@@ -447,6 +440,116 @@ AND
 
 
         /// <summary>
+        /// This timer callback runs when the scavenge sweep timer elapses.
+        /// Its purpose is to cycle through offline game_servers records in the
+        /// database, which have had a heartbeat more recent than
+        /// ScavengerTimeSpan since the current time.  Such servers are then
+        /// re-pinged in a low frequency interval so as to allow servers that
+        /// had gone offline for a long period of time (but had been returned
+        /// to service afterwards) to be automatically re-listed eventually.
+        /// </summary>
+        /// <param name="sender">Unused.</param>
+        /// <param name="e">Unused.</param>
+        private void ScavengerSweepTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            try
+            {
+                bool Processed = false;
+                DateTime Now = DateTime.UtcNow;
+                string Query = String.Format(
+@"SELECT `game_server_id`,
+    `server_address` 
+FROM `game_servers` 
+WHERE `product_id` = {0} 
+AND `game_server_id` > {1}
+AND `online` = false 
+AND `last_heartbeat` >= '{2}' 
+GROUP BY `game_server_id` 
+ORDER BY `game_server_id` 
+LIMIT 25",
+                    MasterServer.ProductID,
+                    ScavengeServerId,
+                    MasterServer.DateToSQLDate(Now.Subtract(ScavengerTimeSpan)));
+
+                //
+                // Examine each server record returned and, if the server is
+                // still offline, enqueue a ping to it.  Advance the iterator
+                // to the next server as each server is processed.
+                //
+
+                using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
+                {
+                    while (Reader.Read())
+                    {
+                        uint ServerId = Reader.GetUInt32(0);
+                        IPEndPoint ServerAddress = ConvertServerHostnameToIPEndPoint(Reader.GetString(1));
+
+                        if (ServerId > ScavengeServerId)
+                            ScavengeServerId = ServerId;
+
+                        Processed = true;
+
+                        if (ServerAddress == null)
+                            continue;
+
+                        NWGameServer Server = LookupServerByAddress(ServerAddress, false);
+
+                        if (Server == null || Server.Online == false)
+                            MasterServer.SendServerInfoRequest(ServerAddress);
+                    }
+                }
+
+                //
+                // If no servers were processed, then the end of the iterator
+                // list must have been reached.  Re-start the sweep cycle at
+                // the beginning next time.
+                //
+
+                if (Processed == false)
+                    ScavengeServerId = 0;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(LogLevel.Error, "NWServerTracker.ScavengeSweepTimer_Elapsed(): Excepton processing scavenge server list: {0}", ex);
+            }
+
+            if (!HeartbeatsEnabled)
+                return;
+
+            lock (HeartbeatLock)
+            {
+                ScavengerSweepTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// This method converts a dotted-quad:port string into an IPEndPoint.
+        /// </summary>
+        /// <param name="Hostname">Supplies the dotted-quad:port string.
+        /// </param>
+        /// <returns>The converted IPEndPoint is returned.  If the address was
+        /// malformed, null is returned.</returns>
+        private IPEndPoint ConvertServerHostnameToIPEndPoint(string Hostname)
+        {
+            int i = Hostname.IndexOf(':');
+
+            if (i == -1)
+                return null;
+
+            try
+            {
+                return new IPEndPoint(
+                    IPAddress.Parse(Hostname.Substring(0, i)),
+                    Convert.ToInt32(Hostname.Substring(i + 1)));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+
+        /// <summary>
         /// The maximum lifetime, in seconds, for a server to be considered
         /// active (for purposes of sending a heartbeat ping), since the last
         /// successfully received message from the server.
@@ -469,6 +572,20 @@ AND
         private const int PENDING_GAME_SERVER_SWEEP_INTERVAL = 5 * 60 * 1000;
 
         /// <summary>
+        /// The interval, in milliseconds, after which the game_servers table
+        /// is next iterated through for a selection of servers to re-ping for
+        /// the background scavenger.
+        /// </summary>
+        private const int SCAVENGE_SWEEP_INTERVAL = 8 * 60 * 60 * 1000;
+
+        /// <summary>
+        /// The number of days that a server will be periodically re-pinged by
+        /// the background server scavenger since its last successful heartbeat
+        /// return.
+        /// </summary>
+        private const int SCAVENGER_SPAN_DAYS = 7;
+
+        /// <summary>
         /// The heartbeat cutoff time span, derived from SERVER_LIFETIME and
         /// used for heartbeat comparisons.
         /// </summary>
@@ -479,6 +596,13 @@ AND
         /// for autosave.
         /// </summary>
         public static TimeSpan HeartbeatSaveTimeSpan = TimeSpan.FromSeconds(HEARTBEAT_SAVE);
+
+        /// <summary>
+        /// The time span from now that servers are considered eligible for
+        /// automatic scavenging from the offline list, since their last active
+        /// heartbeat report.
+        /// </summary>
+        public static TimeSpan ScavengerTimeSpan = TimeSpan.FromDays(7);
 
         /// <summary>
         /// The list of active game servers that have had live connectivity in
@@ -507,5 +631,19 @@ AND
         /// the web service API.
         /// </summary>
         private System.Timers.Timer PendingGameServersSweepTimer = null;
+
+        /// <summary>
+        /// The timer used to trigger periodic scavenger scans of the
+        /// game_servers table, used to repopulate servers that have since gone
+        /// offline longer than the heartbeat interval, but shorter than the
+        /// scavenge time span.
+        /// </summary>
+        private System.Timers.Timer ScavengerSweepTimer = null;
+
+        /// <summary>
+        /// The server id of the last sever examined for scavenging.  If zero,
+        /// then the scavenge cycle restarts next timer elapse.
+        /// </summary>
+        private uint ScavengeServerId = 0;
     }
 }
