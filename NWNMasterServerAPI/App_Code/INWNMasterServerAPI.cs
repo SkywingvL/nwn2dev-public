@@ -300,6 +300,7 @@ namespace NWN
         /// Usually, this value is concatenated with the ModuleDescription in
         /// order to form the display name for the server.
         /// </summary>
+        [DataMember]
         public string ServerDescription { get; set; }
     }
 
