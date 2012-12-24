@@ -70,6 +70,9 @@ namespace NWNMasterServer
                 if (PWCUrl == null)
                     PWCUrl = "";
 
+                if (ServerDescription == null)
+                    ServerDescription = "";
+
                 string Query = String.Format(
 @"INSERT INTO `game_servers` (
     `game_server_id`,
@@ -95,7 +98,8 @@ namespace NWNMasterServer
     `one_party_only`,
     `elc_enforced`,
     `ilr_enforced`,
-    `pwc_url`)
+    `pwc_url`,
+    `server_description`)
 VALUES (
     {0},
     {1},
@@ -120,7 +124,8 @@ VALUES (
     {20},
     {21},
     {22},
-    '{23}')
+    '{23}',
+    '{24}')
 ON DUPLICATE KEY UPDATE 
     `expansions_mask` = {2},
     `build_number` = {3},
@@ -143,7 +148,8 @@ ON DUPLICATE KEY UPDATE
     `one_party_only` = {20},
     `elc_enforced` = {21},
     `ilr_enforced` = {22},
-    `pwc_url` = '{23}'",
+    `pwc_url` = '{23}',
+    `server_description` = '{24}'",
                 DatabaseId,
                 MasterServer.ProductID,
                 ExpansionsMask,
@@ -167,7 +173,8 @@ ON DUPLICATE KEY UPDATE
                 OnePartyOnly,
                 ELCEnforced,
                 ILREnforced,
-                MySqlHelper.EscapeString(PWCUrl.Length > 256 ? PWCUrl.Substring(0, 256) : PWCUrl)
+                MySqlHelper.EscapeString(PWCUrl.Length > 256 ? PWCUrl.Substring(0, 256) : PWCUrl),
+                MySqlHelper.EscapeString(ServerDescription.Length > 256 ? ServerDescription.Substring(0, 256) : ServerDescription)
                 );
 
                 MasterServer.ExecuteQueryNoReaderCombine(Query);
@@ -211,7 +218,8 @@ ON DUPLICATE KEY UPDATE
     `one_party_only`,
     `elc_enforced`,
     `ilr_enforced`,
-    `pwc_url`
+    `pwc_url`,
+    `server_description`
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `server_address` = '{1}'",
@@ -247,6 +255,7 @@ AND `server_address` = '{1}'",
                     Server.ELCEnforced = Reader.GetBoolean(20);
                     Server.ILREnforced = Reader.GetBoolean(21);
                     PWCUrl = Reader.GetString(22);
+                    ServerDescription = Reader.GetString(23);
                 }
             }
             catch (Exception e)
@@ -603,7 +612,8 @@ AND `server_address` = '{1}'",
         /// <param name="GameType">Supplies the new game type.</param>
         /// <param name="PWCUrl">Supplies the new PWC url.</param>
         /// <param name="BuildNumber">Supplies the new build number.</param>
-        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType, string PWCUrl, UInt16 BuildNumber)
+        /// <param name="GameDetails">Supplies the server description.</param>
+        public void OnDescriptionInfoUpdate(string ModuleDescription, string ModuleUrl, uint GameType, string PWCUrl, UInt16 BuildNumber, string GameDetails)
         {
             DateTime Now = DateTime.UtcNow;
 
@@ -615,13 +625,15 @@ AND `server_address` = '{1}'",
                     (this.ModuleUrl != ModuleUrl) ||
                     (this.GameType != GameType) ||
                     (this.PWCUrl != PWCUrl) ||
-                    (this.BuildNumber != BuildNumber))
+                    (this.BuildNumber != BuildNumber) ||
+                    (this.ServerDescription != GameDetails))
                 {
                     this.ModuleDescription = ModuleDescription;
                     this.ModuleUrl = ModuleUrl;
                     this.GameType = GameType;
                     this.PWCUrl = PWCUrl;
                     this.BuildNumber = BuildNumber;
+                    this.ServerDescription = GameDetails;
 
                     if (!Online)
                         MarkServerOnline();
@@ -801,6 +813,11 @@ AND `server_address` = '{1}'",
         /// The PWC URL.
         /// </summary>
         public string PWCUrl { get; set; }
+
+        /// <summary>
+        /// The server description ("GameDetails") field.
+        /// </summary>
+        public string ServerDescription { get; set; }
 
         /// <summary>
         /// The minimum acceptable character level.

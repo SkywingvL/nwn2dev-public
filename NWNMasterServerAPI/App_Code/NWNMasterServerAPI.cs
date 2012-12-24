@@ -432,7 +432,21 @@ WHERE
         /// <returns>A list of matching servers is returned.</returns>
         public IList<NWGameServer> LookupServerByGameTypeClientExtension(string Product, uint GameType, uint ClientExtensionVersion)
         {
-            return LookupServerByGameType(Product, GameType);
+            IList<NWGameServer> Servers = LookupServerByGameType(Product, GameType);
+
+            //
+            // Adjust the module description field to be a combined display
+            // name for old clients.  Next release, this behavior will be
+            // limited to requestors that are just 1.0.0.22 or lower.
+            //
+
+            foreach (NWGameServer Server in Servers)
+            {
+                if (!String.IsNullOrEmpty(Server.ServerDescription))
+                    Server.ModuleDescription = Server.ServerDescription + Server.ModuleDescription;
+            }
+
+            return Servers;
         }
 
         /// <summary>
@@ -508,6 +522,7 @@ ON DUPLICATE KEY UPDATE
             Server.ELCEnforced = Reader.GetBoolean(20);
             Server.ILREnforced = Reader.GetBoolean(21);
             Server.PWCUrl = Reader.GetString(22);
+            Server.ServerDescription = Reader.GetString(23);
 
             return Server;
         }
@@ -571,7 +586,8 @@ SELECT `game_server_id`,
         `one_party_only`,
         `elc_enforced`,
         `ilr_enforced`,
-        `pwc_url`
+        `pwc_url`,
+        `server_description`
     FROM `game_servers` ";
 
         /// <summary>

@@ -209,6 +209,7 @@ namespace NWNMasterServer
     `elc_enforced` bool NOT NULL,
     `ilr_enforced` bool NOT NULL,
     `pwc_url` varchar(256) NOT NULL,
+    `server_description` varchar(256) NOT NULL,
     PRIMARY KEY (`game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`),
     INDEX (`product_id`, `online`),
@@ -269,7 +270,8 @@ namespace NWNMasterServer
     `one_party_only`,
     `elc_enforced`,
     `ilr_enforced`,
-    `pwc_url` 
+    `pwc_url`, 
+    `server_description` 
 FROM `game_servers`
 WHERE `product_id` = {0}
 AND `online` = true",
@@ -332,6 +334,7 @@ AND `online` = true",
                         Server.ELCEnforced = Reader.GetBoolean(20);
                         Server.ILREnforced = Reader.GetBoolean(21);
                         Server.PWCUrl = Reader.GetString(22);
+                        Server.ServerDescription = Reader.GetString(23);
 
                         lock (ActiveServerTable)
                         {

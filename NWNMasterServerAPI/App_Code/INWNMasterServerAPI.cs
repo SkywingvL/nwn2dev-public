@@ -294,6 +294,13 @@ namespace NWN
         /// </summary>
         [DataMember]
         public string PWCUrl { get; set; }
+
+        /// <summary>
+        /// The server description from the ServerDesc.txt file on the server.
+        /// Usually, this value is concatenated with the ModuleDescription in
+        /// order to form the display name for the server.
+        /// </summary>
+        public string ServerDescription { get; set; }
     }
 
     /// <summary>

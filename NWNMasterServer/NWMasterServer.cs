@@ -1276,7 +1276,7 @@ namespace NWNMasterServer
 
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
 
-            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl, Build);
+            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl, Build, GameDetails);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{1}' URL '{2}' has game type {3}.",
                 Sender,
