@@ -74,7 +74,7 @@ namespace NWNMasterServer
                 // Bind the socket and prepare it for I/O.
                 //
 
-                BindSocket();
+                SetupSockets();
 
                 //
                 // Create the underlying server tracker.
@@ -86,18 +86,9 @@ namespace NWNMasterServer
                 // Queue the initial block of receive buffers.
                 //
 
-                for (int i = 0; i < BUFFER_COUNT; i += 1)
-                {
-                    Buffers[i].Buffer = new byte[MAX_FRAME_SIZE];
-                    Buffers[i].Sender = new IPEndPoint(0, 0);
-
-                    if (i <= BUFFER_COUNT / 2)
-                        Buffers[i].AssociatedSocket = ServerSocket;
-                    else
-                        Buffers[i].AssociatedSocket = GameSpySocket;
-
-                    InitiateReceive(Buffers[i]);
-                }
+                MasterServerNATDuplicateSocket.InitiateAllReceives();
+                GameSpySocket.InitiateAllReceives();
+                MasterServerSocket.InitiateAllReceives();
 
                 //
                 // Inform the server tracker that it is clear to begin
@@ -129,10 +120,10 @@ namespace NWNMasterServer
                         // drained out.
                         //
 
-                        ServerSocket.Shutdown(SocketShutdown.Receive);
-                        GameSpySocket.Shutdown(SocketShutdown.Receive);
-                        ServerSocket.Close(15);
-                        GameSpySocket.Close(15);
+                        MasterServerSocket.Shutdown();
+                        MasterServerNATDuplicateSocket.Shutdown();
+                        GameSpySocket.Shutdown();
+
                         IsShutdown = true;
                         ServerTracker.DrainHeartbeats();
                     }
@@ -153,6 +144,8 @@ namespace NWNMasterServer
                         QueryCombineBuffer.Clear();
                     }
                 }
+
+                Logger.Log(LogLevel.Normal, "NWMasterServer.Run(): Main loop exiting.");
             }
             catch (Exception e)
             {
@@ -300,36 +293,33 @@ namespace NWNMasterServer
         }
 
         /// <summary>
-        /// Bind the socket to the local listener endpoint.
+        /// Setup the various server sockets.
         /// </summary>
-        private void BindSocket()
+        private void SetupSockets()
         {
-            EndPoint LocalEndPoint;
+            IPAddress BindIP;
+            IPAddress NATDuplicateBindIP;
 
             if (String.IsNullOrEmpty(BindAddress))
-                LocalEndPoint = new IPEndPoint(IPAddress.Any, (int)MasterServerPort);
+                BindIP = IPAddress.Any;
             else
-                LocalEndPoint = new IPEndPoint(IPAddress.Parse(BindAddress), (int)MasterServerPort);
+                BindIP = IPAddress.Parse(BindAddress);
 
-            ServerSocket.Blocking = false;
-            ServerSocket.Bind(LocalEndPoint);
-            ServerSocket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
-
-            if (String.IsNullOrEmpty(BindAddress))
-                LocalEndPoint = new IPEndPoint(IPAddress.Any, GAMESPY_SERVER_PORT);
+            if (String.IsNullOrEmpty(NATDuplicateBindAddress))
+                NATDuplicateBindIP = IPAddress.Any;
             else
-                LocalEndPoint = new IPEndPoint(IPAddress.Parse(BindAddress), GAMESPY_SERVER_PORT);
+                NATDuplicateBindIP = IPAddress.Parse(NATDuplicateBindAddress);
 
-            GameSpySocket.Blocking = false;
-            GameSpySocket.Bind(LocalEndPoint);
-            GameSpySocket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+            MasterServerSocket = new SocketInfo(this, BindIP, (int)MasterServerPort, SocketUse.MasterServer, OnRecvMstDatagram);
+            MasterServerNATDuplicateSocket = new SocketInfo(this, NATDuplicateBindIP, 0, SocketUse.MasterServerNATDuplicate, OnRecvMstDatagram);
+            GameSpySocket = new SocketInfo(this, BindIP, GAMESPY_SERVER_PORT, SocketUse.GameSpy, OnRecvGameSpyDatagram);
         }
 
         /// <summary>
         /// Initiate an asynchronous receive operation on a buffer.
         /// </summary>
         /// <param name="Buffer">Supplies the buffer to receive from.</param>
-        private void InitiateReceive(RecvBuffer Buffer)
+        private void InitiateReceive(SocketRecvBuffer Buffer)
         {
             //
             // If shutdown is in process, then prevent new receive operations
@@ -350,7 +340,7 @@ namespace NWNMasterServer
             try
             {
                 EndPoint RecvEndPoint = (EndPoint)Buffer.Sender;
-                IAsyncResult Result = Buffer.AssociatedSocket.BeginReceiveFrom(
+                IAsyncResult Result = Buffer.SocketDescriptor.Socket.BeginReceiveFrom(
                     Buffer.Buffer,
                     0,
                     Buffer.Buffer.Length,
@@ -376,7 +366,7 @@ namespace NWNMasterServer
         /// <param name="Result">Supplies the I/O result.</param>
         private void RecvCompletionCallback(IAsyncResult Result)
         {
-            RecvBuffer Buffer = (RecvBuffer)Result.AsyncState;
+            SocketRecvBuffer Buffer = (SocketRecvBuffer)Result.AsyncState;
             EndPoint RecvEndPoint = (EndPoint)Buffer.Sender;
             int RecvLen;
 
@@ -384,7 +374,7 @@ namespace NWNMasterServer
             {
                 try
                 {
-                    RecvLen = Buffer.AssociatedSocket.EndReceiveFrom(Result, ref RecvEndPoint);
+                    RecvLen = Buffer.SocketDescriptor.Socket.EndReceiveFrom(Result, ref RecvEndPoint);
                 }
                 catch (SocketException e)
                 {
@@ -417,10 +407,9 @@ namespace NWNMasterServer
             {
                 if (RecvLen > 0)
                 {
-                    if (Buffer.AssociatedSocket == ServerSocket)
-                        OnRecvMstDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint);
-                    else
-                        OnRecvGameSpyDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint);
+                    SocketInfo SocketDescriptor = Buffer.SocketDescriptor;
+
+                    SocketDescriptor.OnRecvSocketDatagram(Buffer.Buffer, RecvLen, (IPEndPoint)RecvEndPoint, SocketDescriptor);
                 }
             }
             catch (Exception e)
@@ -434,17 +423,18 @@ namespace NWNMasterServer
         }
 
         /// <summary>
-        /// Send completion callback for master server socket.
+        /// Send completion callback.
         /// </summary>
         /// <param name="Result">Supplies the associated async result.</param>
         private void SendCompletionCallback(IAsyncResult Result)
         {
             int SentBytes;
-            IPEndPoint Recipient = (IPEndPoint)Result.AsyncState;
+            SocketSendState State = (SocketSendState)Result.AsyncState;
+            IPEndPoint Recipient = State.Recipient;
 
             try
             {
-                SentBytes = ServerSocket.EndSendTo(Result);
+                SentBytes = State.Socket.EndSendTo(Result);
             }
             catch (SocketException e)
             {
@@ -460,32 +450,6 @@ namespace NWNMasterServer
         }
 
         /// <summary>
-        /// Send completion callback for GameSpy server socket.
-        /// </summary>
-        /// <param name="Result">Supplies the associated async result.</param>
-        private void GameSpySendCompletionCallback(IAsyncResult Result)
-        {
-            int SentBytes;
-            IPEndPoint Recipient = (IPEndPoint)Result.AsyncState;
-
-            try
-            {
-                SentBytes = GameSpySocket.EndSendTo(Result);
-            }
-            catch (SocketException e)
-            {
-                Logger.Log(LogLevel.Error, "NWMasterServer.GameSpySendCompletionCallback(): Unexpected receive error for host {0}: {1} (Exception: {2})",
-                    Recipient,
-                    e.SocketErrorCode,
-                    e);
-            }
-            catch (Exception e)
-            {
-                Logger.Log(LogLevel.Error, "NWMasterServer.GameSpySendCompletionCallback(): Exception: {0}", e);
-            }
-        }
-
-        /// <summary>
         /// This method handles a received datagram on the master server
         /// socket.  It examines the request and dispatches it as appropriate.
         /// </summary>
@@ -493,7 +457,9 @@ namespace NWNMasterServer
         /// <param name="RecvLen">Supplies the length of the received
         /// datagram.</param>
         /// <param name="Sender">Supplies the datagram sender.</param>
-        private void OnRecvMstDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender, SocketInfo Socket)
         {
             if (RecvLen < 4)
                 return;
@@ -513,7 +479,7 @@ namespace NWNMasterServer
 
                     ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 4, null, 0);
 
-                    OnRecvMstMessage(Cmd, ParseBuffer, Sender);
+                    OnRecvMstMessage(Cmd, ParseBuffer, Sender, Socket);
                 }
             }
         }
@@ -526,7 +492,9 @@ namespace NWNMasterServer
         /// <param name="RecvLen">Supplies the length of the received
         /// datagram.</param>
         /// <param name="Sender">Supplies the datagram sender.</param>
-        private void OnRecvGameSpyDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvGameSpyDatagram(byte[] Buffer, int RecvLen, IPEndPoint Sender, SocketInfo Socket)
         {
             if (RecvLen < 1)
                 return;
@@ -541,7 +509,7 @@ namespace NWNMasterServer
 
                     ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 1, null, 0);
 
-                    OnRecvGameSpyMessage(Cmd, ParseBuffer, Sender);
+                    OnRecvGameSpyMessage(Cmd, ParseBuffer, Sender, Socket);
                 }
             }
         }
@@ -554,57 +522,59 @@ namespace NWNMasterServer
         /// <param name="ParseBuffer">Supplies the message body.</param>
         /// <param name="Sender">Supplies the reply address for the
         /// sender.</param>
-        private void OnRecvMstMessage(uint Cmd, ExoParseBuffer ParseBuffer, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstMessage(uint Cmd, ExoParseBuffer ParseBuffer, IPEndPoint Sender, SocketInfo Socket)
         {
             switch (Cmd)
             {
 
                 case (uint)MstCmd.CommunityAuthorizationRequest:
-                    OnRecvMstCommunityAuthorizationRequest(ParseBuffer, Sender);
+                    OnRecvMstCommunityAuthorizationRequest(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.CDKeyAuthorizationRequest:
-                    OnRecvMstCDKeyAuthorizationRequest(ParseBuffer, Sender);
+                    OnRecvMstCDKeyAuthorizationRequest(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.Heartbeat:
-                    OnRecvMstHeartbeat(ParseBuffer, Sender);
+                    OnRecvMstHeartbeat(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.DisconnectNotify:
-                    OnRecvMstDisconnectNotify(ParseBuffer, Sender);
+                    OnRecvMstDisconnectNotify(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.StartupNotify:
-                    OnRecvMstStartupNotify(ParseBuffer, Sender);
+                    OnRecvMstStartupNotify(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.ModuleLoadNotify:
-                    OnRecvMstModuleLoadNotify(ParseBuffer, Sender);
+                    OnRecvMstModuleLoadNotify(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.MOTDRequest:
-                    OnRecvMstMOTDRequest(ParseBuffer, Sender);
+                    OnRecvMstMOTDRequest(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.VersionRequest:
-                    OnRecvMstVersionRequest(ParseBuffer, Sender);
+                    OnRecvMstVersionRequest(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)MstCmd.StatusRequest:
-                    OnRecvMstStatusRequest(ParseBuffer, Sender);
+                    OnRecvMstStatusRequest(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)ConnAuthCmd.ServerInfoResponse:
-                    OnRecvServerInfoResponse(ParseBuffer, Sender);
+                    OnRecvServerInfoResponse(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)ConnAuthCmd.ServerNameResponse:
-                    OnRecvServerNameResponse(ParseBuffer, Sender);
+                    OnRecvServerNameResponse(ParseBuffer, Sender, Socket);
                     break;
 
                 case (uint)ConnAuthCmd.ServerDescriptionResponse:
-                    OnRecvServerDescriptionResponse(ParseBuffer, Sender);
+                    OnRecvServerDescriptionResponse(ParseBuffer, Sender, Socket);
                     break;
 
             }
@@ -616,7 +586,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstCommunityAuthorizationRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstCommunityAuthorizationRequest(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             UInt16 Length;
@@ -655,7 +627,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstCDKeyAuthorizationRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstCDKeyAuthorizationRequest(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             UInt16 EntryCount;
@@ -736,16 +710,6 @@ namespace NWNMasterServer
                 return;
 
             SendMstCDKeyAuthorization(Sender, CDKeyHashes);
-
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
-
-            //
-            // Record activity for the server and request an updated player
-            // count.
-            //
-
-            Server.RecordActivity();
-            RefreshServerStatus(Sender);
         }
 
         /// <summary>
@@ -754,7 +718,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstHeartbeat(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstHeartbeat(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 PlayerCount;
             List<List<string>> PlayerCDKeyList = new List<List<string>>();
@@ -783,9 +749,6 @@ namespace NWNMasterServer
                 PlayerCDKeyList.Add(CDKeyList);
             }
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
-            Server.OnHeartbeat((uint)PlayerCDKeyList.Count);
-
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstHeartbeat(): Server {0} ActivePlayerCount={1}.", Sender, PlayerCDKeyList.Count);
         }
 
@@ -795,7 +758,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstDisconnectNotify(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstDisconnectNotify(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             UInt16 EntryCount;
@@ -816,7 +781,7 @@ namespace NWNMasterServer
 
                 Server = ServerTracker.LookupServerByAddress(Sender, false);
 
-                if (Server == null)
+                if (Server == null || Server.Online == false)
                     return;
 
                 //
@@ -847,15 +812,6 @@ namespace NWNMasterServer
                 CDKeyList.Add(CDKey);
             }
 
-            Server = ServerTracker.LookupServerByAddress(Sender);
-
-            //
-            // Record activity for the server and request an updated player
-            // count.
-            //
-
-            Server.RecordActivity();
-            RefreshServerStatus(Sender);
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvMstDisconnectNotify()");
         }
 
@@ -865,7 +821,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstStartupNotify(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstStartupNotify(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             Byte Platform;
             UInt16 BuildNumber;
@@ -906,7 +864,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstModuleLoadNotify(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstModuleLoadNotify(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             Byte ExpansionsMask;
             string ModuleName;
@@ -934,7 +894,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstMOTDRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstMOTDRequest(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             Byte Unknown0; // 0
@@ -956,7 +918,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parse context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstVersionRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstVersionRequest(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             Byte Unknown0; // 0
@@ -981,49 +945,35 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parser context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvMstStatusRequest(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvMstStatusRequest(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
 
             if (!Parser.ReadWORD(out DataPort))
                 return;
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
-
             //
-            // Record module activity if this is a repeated contact from this
-            // server.  Otherwise, attempt to discover the actual port number
-            // for the server, while attempting to compensate for a broken NAT
-            // device.
+            // Do not enter the server into the server list until
+            // bidirectional communication has been established.  However,
+            // some broken NATs may respond briefly to the current source
+            // port and then choose another (different!) source port later
+            // for future pings.  To handle this case, send a BNXI probe to
+            // both internal and external addresses.  If the responses are
+            // the same, then assume that the server is actually located at
+            // the internal address; otherwise, create server records for
+            // both servers.
             //
 
-            if (Server != null)
+            if (DataPort != (UInt16)Sender.Port)
             {
-                Server.RecordActivity();
+                IPEndPoint InternalAddress = new IPEndPoint(Sender.Address, (int)DataPort);
+
+                SendServerInfoRequest(InternalAddress);
             }
-            else
-            {
-                //
-                // Do not enter the server into the server list until
-                // bidirectional communication has been established.  However,
-                // some broken NATs may respond briefly to the current source
-                // port and then choose another (different!) source port later
-                // for future pings.  To handle this case, send a BNXI probe to
-                // both internal and external addresses.  If the responses are
-                // the same, then assume that the server is actually located at
-                // the internal address; otherwise, create server records for
-                // both servers.
-                //
 
-                if (DataPort != (UInt16)Sender.Port)
-                {
-                    IPEndPoint InternalAddress = new IPEndPoint(Sender.Address, (int)DataPort);
-
-                    SendServerInfoRequest(InternalAddress);
-                }
-
-                SendServerInfoRequest(Sender);
-            }
+            SendServerInfoRequest(Sender);
 
             SendMstStatusResponse(Sender, MstStatus.MST_STATUS_ONLINE);
         }
@@ -1033,7 +983,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parser context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvServerInfoResponse(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvServerInfoResponse(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             Byte Reserved; // 0xFC
@@ -1141,6 +1093,11 @@ namespace NWNMasterServer
 
             Server = ServerTracker.LookupServerByAddress(Sender);
 
+            if (Mode != GameMode.NWN2)
+                Info.BuildNumber = Server.BuildNumber;
+
+            Server.OnServerInfoUpdate(Info);
+
             if (DataPort == (UInt16)Sender.Port)
             {
                 //
@@ -1178,16 +1135,11 @@ namespace NWNMasterServer
 
                     if (ServerInternal.CheckForNATDuplicate(Server))
                     {
-                        Logger.Log(LogLevel.Normal, "NWMasterServer.OnRecvServerInfoResponse(): Removing NAT duplicate server {0} in preference of server {1}.", Sender, InternalAddress);
+                        Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerInfoResponse(): Removing NAT duplicate server {0} in preference of server {1}.", Sender, InternalAddress);
                         return;
                     }
                 }
             }
-
-            if (Mode != GameMode.NWN2)
-                Info.BuildNumber = Server.BuildNumber;
-
-            Server.OnServerInfoUpdate(Info);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerInfoResponse(): Server {0} has {1}/{2} players ({3}).", Sender, Info.ActivePlayers, Info.MaximumPlayers,
                  Info.ModuleName);
@@ -1198,7 +1150,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parser context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvServerNameResponse(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvServerNameResponse(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             Byte UpdateType;
             UInt16 DataPort;
@@ -1230,7 +1184,9 @@ namespace NWNMasterServer
         /// </summary>
         /// <param name="Parser">Supplies the message parser context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvServerDescriptionResponse(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvServerDescriptionResponse(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             UInt16 DataPort;
             string GameDetails;
@@ -1417,7 +1373,7 @@ namespace NWNMasterServer
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
 
-            SendRawDataToMstClient(Address, Builder);
+            SendRawDataToMstClientNATDuplicate(Address, Builder);
         }
 
         /// <summary>
@@ -1434,7 +1390,7 @@ namespace NWNMasterServer
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerNameRequest(): Sending server name request to {0}.", Address);
 
-            SendRawDataToMstClient(Address, Builder);
+            SendRawDataToMstClientNATDuplicate(Address, Builder);
         }
 
         /// <summary>
@@ -1450,7 +1406,7 @@ namespace NWNMasterServer
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerDescriptionRequest(): Sending server description request to {0}.", Address);
 
-            SendRawDataToMstClient(Address, Builder);
+            SendRawDataToMstClientNATDuplicate(Address, Builder);
         }
 
 
@@ -1476,13 +1432,15 @@ namespace NWNMasterServer
         /// <param name="ParseBuffer">Supplies the message body.</param>
         /// <param name="Sender">Supplies the reply address for the
         /// sender.</param>
-        private void OnRecvGameSpyMessage(uint Cmd, ExoParseBuffer ParseBuffer, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvGameSpyMessage(uint Cmd, ExoParseBuffer ParseBuffer, IPEndPoint Sender, SocketInfo Socket)
         {
             switch (Cmd)
             {
 
                 case (uint)GameSpyCmd.CheckServerStatus:
-                    OnRecvGameSpyCheckServerStatus(ParseBuffer, Sender);
+                    OnRecvGameSpyCheckServerStatus(ParseBuffer, Sender, Socket);
                     break;
 
             }
@@ -1493,7 +1451,9 @@ namespace NWNMasterServer
         /// client.</summary>
         /// <param name="Parser">Supplies the message parser context.</param>
         /// <param name="Sender">Supplies the game server address.</param>
-        private void OnRecvGameSpyCheckServerStatus(ExoParseBuffer Parser, IPEndPoint Sender)
+        /// <param name="Socket">Supplies the associated socket descriptor
+        /// upon which the message was received.</param>
+        private void OnRecvGameSpyCheckServerStatus(ExoParseBuffer Parser, IPEndPoint Sender, SocketInfo Socket)
         {
             //
             // The message contains:
@@ -1534,71 +1494,19 @@ namespace NWNMasterServer
         /// <param name="Builder">Supplies the message body.</param>
         private void SendRawDataToMstClient(IPEndPoint Address, ExoBuildBuffer Builder)
         {
-            unsafe
-            {
-                byte* ByteStream;
-                uint ByteStreamLength;
-                byte* BitStream;
-                uint BitStreamLength;
-                byte[] CompositeBuffer;
-                uint CompositeBufferLength;
+            SendRawDataToSocket(Address, Builder, MasterServerSocket);
+        }
 
-                Builder.GetBuffer(
-                    out ByteStream,
-                    out ByteStreamLength,
-                    out BitStream,
-                    out BitStreamLength);
-
-                CompositeBufferLength = ByteStreamLength + BitStreamLength;
-
-                if (CompositeBufferLength == 0)
-                    return;
-
-                //
-                // Allocate a contiguous message buffer, and fail here and now
-                // if we can't.
-                //
-
-                try
-                {
-                    CompositeBuffer = new byte[CompositeBufferLength];
-
-                    //
-                    // Assemble the discrete components into a single
-                    // contiguous composite buffer for outbound trnasmission.
-                    //
-
-                    Marshal.Copy(
-                        (IntPtr)ByteStream,
-                        CompositeBuffer,
-                        0,
-                        (int)ByteStreamLength);
-
-                    for (uint i = 0; i < BitStreamLength; i += 1)
-                    {
-                        CompositeBuffer[ByteStreamLength + i] = BitStream[i];
-                    }
-
-                    //
-                    // Transmit the underlying message now that we have
-                    // captured it into a flat buffer consumable by the I/O
-                    // system.
-                    //
-
-                    IAsyncResult Result = ServerSocket.BeginSendTo(
-                        CompositeBuffer,
-                        0,
-                        (int)CompositeBufferLength,
-                        SocketFlags.None,
-                        Address,
-                        SendCompletionCallback,
-                        Address);
-                }
-                catch (Exception e)
-                {
-                    Logger.Log(LogLevel.Error, "NWMasterServer.SendRawDataToMstClient(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
-                }
-            }
+        /// <summary>
+        /// This method transmits a raw datagram to a master server client,
+        /// such as a game server or game client.  The message is sent using
+        /// the NAT duplicate detector socket.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="Builder">Supplies the message body.</param>
+        private void SendRawDataToMstClientNATDuplicate(IPEndPoint Address, ExoBuildBuffer Builder)
+        {
+            SendRawDataToSocket(Address, Builder, MasterServerNATDuplicateSocket);
         }
 
         /// <summary>
@@ -1608,6 +1516,17 @@ namespace NWNMasterServer
         /// <param name="Address">Supplies the message recipient.</param>
         /// <param name="Builder">Supplies the message body.</param>
         private void SendRawDataToGameSpyClient(IPEndPoint Address, ExoBuildBuffer Builder)
+        {
+            SendRawDataToSocket(Address, Builder, GameSpySocket);
+        }
+
+        /// <summary>
+        /// This method transmits a raw datagram to a socket.
+        /// </summary>
+        /// <param name="Address">Supplies the message recipient.</param>
+        /// <param name="Builder">Supplies the message body.</param>
+        /// <param name="Socket">Supplies the socket to send to.</param>
+        private void SendRawDataToSocket(IPEndPoint Address, ExoBuildBuffer Builder, SocketInfo Socket)
         {
             unsafe
             {
@@ -1660,18 +1579,18 @@ namespace NWNMasterServer
                     // system.
                     //
 
-                    IAsyncResult Result = GameSpySocket.BeginSendTo(
+                    IAsyncResult Result = Socket.Socket.BeginSendTo(
                         CompositeBuffer,
                         0,
                         (int)CompositeBufferLength,
                         SocketFlags.None,
                         Address,
-                        GameSpySendCompletionCallback,
-                        Address);
+                        SendCompletionCallback,
+                        new SocketSendState(Address, Socket.Socket));
                 }
                 catch (Exception e)
                 {
-                    Logger.Log(LogLevel.Error, "NWMasterServer.SendRawDataToGameSpyClient(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
+                    Logger.Log(LogLevel.Error, "NWMasterServer.SendRawDataToSocket(): Failed to send data to Mst client {0}: Exception: {1}", Address, e);
                 }
             }
         }
@@ -1702,11 +1621,22 @@ namespace NWNMasterServer
         /// A receive buffer that can contain data for a single datagram sent
         /// by a client or game server.
         /// </summary>
-        private struct RecvBuffer
+        private class SocketRecvBuffer
         {
+            /// <summary>
+            /// The buffer to receive on.
+            /// </summary>
             public byte[] Buffer;
+
+            /// <summary>
+            /// Storage for the sender for an asynchronous receive.
+            /// </summary>
             public IPEndPoint Sender;
-            public Socket AssociatedSocket;
+
+            /// <summary>
+            /// Back link to the associated socket descriptor.
+            /// </summary>
+            public SocketInfo SocketDescriptor;
         }
 
         /// <summary>
@@ -1848,6 +1778,155 @@ namespace NWNMasterServer
             NWN1,
             NWN2
         }
+
+        /// <summary>
+        /// Types of a socket descriptor.
+        /// </summary>
+        private enum SocketUse
+        {
+            /// <summary>
+            /// Master server protocol socket.
+            /// </summary>
+            MasterServer,
+
+            /// <summary>
+            /// Master server NAT duplicate detector socket.
+            /// </summary>
+            MasterServerNATDuplicate,
+
+            /// <summary>
+            /// GameSpy protocol socket.
+            /// </summary>
+            GameSpy,
+        }
+
+        /// <summary>
+        /// Descriptor structure for a UDP socket.
+        /// </summary>
+        private class SocketInfo
+        {
+            /// <summary>
+            /// Set up a SocketInfo descriptor for a socket and bind it to a
+            /// local endpoint.
+            /// </summary>
+            /// <param name="MasterServer">Supplies the associated master
+            /// server object.</param>
+            /// <param name="BindAddress">Supplies the bind address.</param>
+            /// <param name="BindPort">Supplies the bind port, else 0 if there
+            /// is to be no specific local bind port.</param>
+            /// <param name="SocketUse">Supplies the usage type of the
+            /// socket.</param>
+            /// <param name="OnRecvSocketDatagram">Supplies the high level
+            /// socket receive message callback for the socket.</param>
+            public SocketInfo(NWMasterServer MasterServer, IPAddress BindAddress, int BindPort, SocketUse SocketUse, OnRecvSocketDatagramDelegate OnRecvSocketDatagram)
+            {
+                this.MasterServer = MasterServer;
+                this.SocketUse = SocketUse;
+                this.OnRecvSocketDatagram = OnRecvSocketDatagram;
+
+                for (int i = 0; i < BUFFER_COUNT; i += 1)
+                {
+                    SocketRecvBuffer Buffer = new SocketRecvBuffer();
+
+                    Buffers[i] = Buffer;
+
+                    Buffer.Buffer = new byte[MAX_FRAME_SIZE];
+                    Buffer.Sender = new IPEndPoint(0, 0);
+                    Buffer.SocketDescriptor = this;
+                }
+
+                Socket.Blocking = false;
+                Socket.Bind(new IPEndPoint(BindAddress, BindPort));
+                Socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+            }
+
+            /// <summary>
+            /// Initiate receives on all receive buffers.
+            /// </summary>
+            public void InitiateAllReceives()
+            {
+                for (int i = 0; i < BUFFER_COUNT; i += 1)
+                {
+                    SocketRecvBuffer Buffer = Buffers[i];
+
+                    MasterServer.InitiateReceive(Buffer);
+                }
+            }
+
+            /// <summary>
+            /// Shut down activity on the socket.
+            /// </summary>
+            public void Shutdown()
+            {
+                Socket.Shutdown(SocketShutdown.Receive);
+                Socket.Close(15);
+            }
+
+            /// <summary>
+            /// This delegate handles a received datagram on the socket.
+            /// </summary>
+            /// <param name="Buffer">Supplies the received datagram.</param>
+            /// <param name="RecvLen">Supplies the length of the received
+            /// datagram.</param>
+            /// <param name="Sender">Supplies the datagram sender.</param>
+            /// <param name="Socket">Supplies the associated socket descriptor
+            /// upon which the message was received.</param>
+            public delegate void OnRecvSocketDatagramDelegate(byte[] Buffer, int RecvLen, IPEndPoint Sender, SocketInfo Socket);
+
+            /// <summary>
+            /// Receive buffers for the socket.
+            /// </summary>
+            public SocketRecvBuffer[] Buffers = new SocketRecvBuffer[BUFFER_COUNT];
+
+            /// <summary>
+            /// The type of the socket.
+            /// </summary>
+            public SocketUse SocketUse;
+
+            /// <summary>
+            /// The underlying socket to issue I/O on.
+            /// </summary>
+            public Socket Socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+            /// <summary>
+            /// Back link to the master server object itself.
+            /// </summary>
+            public NWMasterServer MasterServer;
+
+            /// <summary>
+            /// The high level socket receive callback for the socket
+            /// descriptor.
+            /// </summary>
+            public OnRecvSocketDatagramDelegate OnRecvSocketDatagram;
+        }
+
+        /// <summary>
+        /// State holder for socket send operations, used to field a socket
+        /// send completion callback..
+        /// </summary>
+        private class SocketSendState
+        {
+            /// <summary>
+            /// Create a new SocketSendState.
+            /// </summary>
+            /// <param name="Recipient">Supplies the message recipient.</param>
+            /// <param name="Socket">Supplies the send socket.</param>
+            public SocketSendState(IPEndPoint Recipient, Socket Socket)
+            {
+                this.Recipient = Recipient;
+                this.Socket = Socket;
+            }
+
+            /// <summary>
+            /// The message recipient.
+            /// </summary>
+            public IPEndPoint Recipient;
+
+            /// <summary>
+            /// The socket to send on.
+            /// </summary>
+            public Socket Socket;
+        }
         
         /// <summary>
         /// The underlying interface with the SCM.
@@ -1867,7 +1946,7 @@ namespace NWNMasterServer
         /// <summary>
         /// Count of buffers to simultaneously attempt to fill.
         /// </summary>
-        private const int BUFFER_COUNT = 10;
+        private const int BUFFER_COUNT = 5;
 
         /// <summary>
         /// The master server port number.
@@ -1909,24 +1988,28 @@ namespace NWNMasterServer
         /// <summary>
         /// Receive buffers available to pull data into from the network.
         /// </summary>
-        private RecvBuffer[] Buffers = new RecvBuffer[BUFFER_COUNT];
+        private SocketRecvBuffer[] Buffers = new SocketRecvBuffer[BUFFER_COUNT];
+
+        /// <summary>
+        /// The master server socket.
+        /// </summary>
+        private SocketInfo MasterServerSocket = null;
+
+        /// <summary>
+        /// The socket used to work around buggy NAT gateways that do not
+        /// use the right source port when a static port forward is in use.
+        /// </summary>
+        private SocketInfo MasterServerNATDuplicateSocket = null;
+
+        /// <summary>
+        /// The GameSpy socket.
+        /// </summary>
+        private SocketInfo GameSpySocket = null;
 
         /// <summary>
         /// The count of buffers that have a receive pending.
         /// </summary>
         private volatile int PendingBuffers = 0;
-
-        /// <summary>
-        /// The UDP socket to receive master server messages from (and to send
-        /// replies with).
-        /// </summary>
-        private Socket ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-
-        /// <summary>
-        /// The UDP socket to receive GameSpy messages from (and to send
-        /// replies with).
-        /// </summary>
-        private Socket GameSpySocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 
         /// <summary>
         /// The server tracker instance that retains state about known servers.
@@ -1937,6 +2020,11 @@ namespace NWNMasterServer
         /// The server bind address.
         /// </summary>
         private string BindAddress = ServerSettings.Default.BindAddress;
+
+        /// <summary>
+        /// The server bind address for the NAT duplicate detector socket.
+        /// </summary>
+        private string NATDuplicateBindAddress = ServerSettings.Default.NATDuplicateBindAddress;
 
         /// <summary>
         /// The server game build number.

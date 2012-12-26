@@ -133,5 +133,17 @@ namespace NWNMasterServer {
                 this["GameMode"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.0.0.0")]
+        public string NATDuplicateBindAddress {
+            get {
+                return ((string)(this["NATDuplicateBindAddress"]));
+            }
+            set {
+                this["NATDuplicateBindAddress"] = value;
+            }
+        }
     }
 }

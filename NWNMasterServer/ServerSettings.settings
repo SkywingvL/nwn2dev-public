@@ -35,5 +35,8 @@ http://www.atarisupport.com</Value>
     <Setting Name="GameMode" Type="System.String" Scope="User">
       <Value Profile="(Default)">NWN2</Value>
     </Setting>
+    <Setting Name="NATDuplicateBindAddress" Type="System.String" Scope="User">
+      <Value Profile="(Default)">0.0.0.0</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

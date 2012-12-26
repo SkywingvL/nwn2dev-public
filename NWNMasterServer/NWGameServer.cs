@@ -308,7 +308,7 @@ AND `server_address` = '{1}'",
                         (OnePartyOnly == InternalServer.OnePartyOnly) &&
                         (ELCEnforced == InternalServer.ELCEnforced) &&
                         (ILREnforced == InternalServer.ILREnforced) &&
-                        (ExpansionsMask != InternalServer.ExpansionsMask))
+                        (ExpansionsMask == InternalServer.ExpansionsMask))
                     {
                         NATDuplicateTick = (uint)Environment.TickCount;
 
@@ -698,8 +698,12 @@ AND `server_address` = '{1}'",
 
             lock (this)
             {
-                if ((Now >= LastHeartbeat) &&
-                    (Now - LastHeartbeat) >= NWServerTracker.HeartbeatCutoffTimeSpan)
+                if (InitialHeartbeat)
+                {
+                    InitialHeartbeat = false;
+                }
+                else if ((Now >= LastHeartbeat) &&
+                         (Now - LastHeartbeat) >= NWServerTracker.HeartbeatCutoffTimeSpan)
                 {
                     ActivePlayerCount = 0;
                     Online = false;
@@ -726,6 +730,11 @@ AND `server_address` = '{1}'",
             HeartbeatTimer.Interval = (HEARTBEAT_INTERVAL + (Rng.Next() % HEARTBEAT_JITTER));
             HeartbeatTimer.Start();
         }
+
+        /// <summary>
+        /// True if this is the initial on restore heartbeat.
+        /// </summary>
+        public bool InitialHeartbeat { get; set; }
 
         /// <summary>
         /// Platform code ('W' - Windows, 'L' - Linux).

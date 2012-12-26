@@ -69,18 +69,9 @@ namespace NWNMasterServer
                         if (!Server.Online)
                             continue;
 
-                        if ((Server.LastHeartbeat >= Now) ||
-                            (Now - Server.LastHeartbeat) < HeartbeatCutoffTimeSpan)
-                        {
-                            Server.StartHeartbeat();
-                            HeartbeatsStarted += 1;
-                        }
-                        else
-                        {
-                            Server.Online = false;
-                            Server.StopHeartbeat();
-                            Server.Save();
-                        }
+                        Server.InitialHeartbeat = true;
+                        Server.StartHeartbeat();
+                        HeartbeatsStarted += 1;
                     }
                 }
             }
