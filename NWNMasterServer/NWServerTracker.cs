@@ -25,7 +25,7 @@ namespace NWNMasterServer
     /// <summary>
     /// This class manages tracking server activity.
     /// </summary>
-    internal class NWServerTracker
+    internal sealed class NWServerTracker
     {
 
         /// <summary>

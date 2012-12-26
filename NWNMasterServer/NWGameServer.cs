@@ -27,7 +27,7 @@ namespace NWNMasterServer
     /// This class records information associated with a single game server
     /// instance.
     /// </summary>
-    internal class NWGameServer
+    internal sealed class NWGameServer
     {
         public NWGameServer(NWMasterServer MasterServer, IPEndPoint ServerAddress)
         {

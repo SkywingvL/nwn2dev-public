@@ -29,7 +29,7 @@ using MySql.Data.MySqlClient;
 
 namespace NWNMasterServer
 {
-    internal class NWMasterServer
+    internal sealed class NWMasterServer
     {
 
         /// <summary>
@@ -1624,7 +1624,7 @@ namespace NWNMasterServer
         /// A receive buffer that can contain data for a single datagram sent
         /// by a client or game server.
         /// </summary>
-        private class SocketRecvBuffer
+        private sealed class SocketRecvBuffer
         {
             /// <summary>
             /// The buffer to receive on.
@@ -1806,7 +1806,7 @@ namespace NWNMasterServer
         /// <summary>
         /// Descriptor structure for a UDP socket.
         /// </summary>
-        private class SocketInfo
+        private sealed class SocketInfo
         {
             /// <summary>
             /// Set up a SocketInfo descriptor for a socket and bind it to a
@@ -1907,7 +1907,7 @@ namespace NWNMasterServer
         /// State holder for socket send operations, used to field a socket
         /// send completion callback..
         /// </summary>
-        private class SocketSendState
+        private sealed class SocketSendState
         {
             /// <summary>
             /// Create a new SocketSendState.

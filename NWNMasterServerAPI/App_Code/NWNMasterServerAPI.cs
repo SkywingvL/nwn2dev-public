@@ -29,7 +29,7 @@ namespace NWN
     /// This class implements the master server communication API.
     /// </summary>
     [ServiceBehavior(Namespace = "http://api.mst.valhallalegends.com/NWNMasterServerAPI")]
-    public class NWNMasterServerAPI : INWNMasterServerAPI
+    public sealed class NWNMasterServerAPI : INWNMasterServerAPI
     {
 
         /// <summary>
