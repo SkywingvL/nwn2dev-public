@@ -35,6 +35,7 @@ namespace NWNMasterServer
 
             this.MasterServer = MasterServer;
             this.Address = ServerAddress;
+            this.InitialHeartbeat = false;
 
             HbTimer = new Timer(HEARTBEAT_INTERVAL + (Rng.Next() % HEARTBEAT_JITTER));
 
