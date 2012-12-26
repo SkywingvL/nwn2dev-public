@@ -146,6 +146,9 @@ namespace NWNMasterServer
                 }
 
                 Logger.Log(LogLevel.Normal, "NWMasterServer.Run(): Main loop exiting.");
+
+                if (ServiceObject != null)
+                    ServiceObject.RequestStop();
             }
             catch (Exception e)
             {

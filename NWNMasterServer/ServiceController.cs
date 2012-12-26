@@ -43,6 +43,17 @@ namespace NWNMasterServer
         }
 
         /// <summary>
+        /// Request stop, but only if necessary.
+        /// </summary>
+        public void RequestStop()
+        {
+            if (this.StopRequested)
+                return;
+
+            Stop();
+        }
+
+        /// <summary>
         /// Execute the server program.
         /// </summary>
         /// <param name="args">Supplies arguments from the SCM.</param>
