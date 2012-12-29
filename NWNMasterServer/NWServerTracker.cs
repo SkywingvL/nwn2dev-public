@@ -101,12 +101,6 @@ namespace NWNMasterServer
 
             HeartbeatsEnabled = false;
 
-            Thread.MemoryBarrier();
-
-            PendingGameServersSweepTimer.Stop();
-            ScavengerSweepTimer.Stop();
-            BlacklistSweepTimer.Stop();
-
             //
             // Flush any in-flight requestors out of the heartbeat path by
             // ensuring that they have released synchronization.
@@ -114,6 +108,16 @@ namespace NWNMasterServer
 
             Monitor.Enter(HeartbeatLock);
             Monitor.Exit(HeartbeatLock);
+
+            //
+            // Stop all of the active timers.  New timers that have elapsed
+            // will have already completed starting the timer again or will now
+            // observe that future timer restarts are already forbidden.
+            //
+
+            PendingGameServersSweepTimer.Stop();
+            ScavengerSweepTimer.Stop();
+            BlacklistSweepTimer.Stop();
         }
 
         /// <summary>
@@ -128,11 +132,11 @@ namespace NWNMasterServer
             // and request the heartbeat.
             //
 
-            if (!HeartbeatsEnabled)
-                return false;
-
             lock (HeartbeatLock)
             {
+                if (!HeartbeatsEnabled)
+                    return false;
+
                 MasterServer.RefreshServerStatus(Server.ServerAddress);
             }
 
@@ -480,13 +484,11 @@ AND
                 Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Exception processing pending servers list: {0}.", ex);
             }
 
-            Thread.MemoryBarrier();
-
-            if (!HeartbeatsEnabled)
-                return;
-
             lock (HeartbeatLock)
             {
+                if (!HeartbeatsEnabled)
+                    return;
+
                 PendingGameServersSweepTimer.Start();
             }
         }
@@ -565,13 +567,11 @@ LIMIT 50",
                 Logger.Log(LogLevel.Error, "NWServerTracker.ScavengeSweepTimer_Elapsed(): Excepton processing scavenge server list: {0}", ex);
             }
 
-            Thread.MemoryBarrier();
-
-            if (!HeartbeatsEnabled)
-                return;
-
             lock (HeartbeatLock)
             {
+                if (!HeartbeatsEnabled)
+                    return;
+
                 ScavengerSweepTimer.Start();
             }
         }
@@ -594,11 +594,11 @@ LIMIT 50",
                 Logger.Log(LogLevel.Error, "NWServerTracker.BlacklistSweepTimer_Elapsed(): Exception refreshing blacklist: {0}", ex);
             }
 
-            if (!HeartbeatsEnabled)
-                return;
-
             lock (HeartbeatLock)
             {
+                if (!HeartbeatsEnabled)
+                    return;
+
                 BlacklistSweepTimer.Start();
             }
         }
