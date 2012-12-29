@@ -4,7 +4,7 @@ Copyright (c) Ken Johnson (Skywing). All rights reserved.
 
 Module Name:
 
-    ServerTracker.cs
+    NWServerTracker.cs
 
 Abstract:
 
@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Net;
 using System.Threading;
 using MySql.Data.MySqlClient;
@@ -46,6 +47,10 @@ namespace NWNMasterServer
             ScavengerSweepTimer = new System.Timers.Timer(SCAVENGE_SWEEP_INTERVAL);
             ScavengerSweepTimer.AutoReset = false;
             ScavengerSweepTimer.Elapsed += new System.Timers.ElapsedEventHandler(ScavengerSweepTimer_Elapsed);
+
+            BlacklistSweepTimer = new System.Timers.Timer(BLACKLIST_SWEEP_INTERVAL);
+            BlacklistSweepTimer.AutoReset = false;
+            BlacklistSweepTimer.Elapsed += new System.Timers.ElapsedEventHandler(BlacklistSweepTimer_Elapsed);
 
             InitializeDatabase();
         }
@@ -80,6 +85,7 @@ namespace NWNMasterServer
 
             PendingGameServersSweepTimer.Start();
             ScavengerSweepTimer.Start();
+            BlacklistSweepTimer.Start();
         }
 
         /// <summary>
@@ -89,14 +95,17 @@ namespace NWNMasterServer
         /// </summary>
         public void DrainHeartbeats()
         {
-            PendingGameServersSweepTimer.Stop();
-            ScavengerSweepTimer.Stop();
-
             //
             // Prevent new requestors from spinning up new heartbeat requests.
             //
 
             HeartbeatsEnabled = false;
+
+            Thread.MemoryBarrier();
+
+            PendingGameServersSweepTimer.Stop();
+            ScavengerSweepTimer.Stop();
+            BlacklistSweepTimer.Stop();
 
             //
             // Flush any in-flight requestors out of the heartbeat path by
@@ -128,6 +137,31 @@ namespace NWNMasterServer
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Perform a blacklist query.
+        /// </summary>
+        /// <param name="Lookup">Supplies the query input parameters.</param>
+        /// <returns>True if the query matches a blacklist entry.</returns>
+        public bool IsBlacklisted(BlacklistLookup Lookup)
+        {
+            //
+            // Locally capture the current blacklist and sweep through the list
+            // searching for a match.
+            //
+
+            var LocalBlacklist = Blacklist;
+
+            foreach (BlacklistEntry Entry in LocalBlacklist)
+            {
+                if (Lookup.ServerAddress != null && Entry.IsBlacklistMatched(Lookup.ServerAddress.ToString(), BlacklistEntry.BlacklistType.BlacklistTypeServerAddress))
+                    return true;
+                if (Lookup.ModuleName != null && Entry.IsBlacklistMatched(Lookup.ModuleName, BlacklistEntry.BlacklistType.BlacklistTypeModuleName))
+                    return true;
+            }
+
+            return false;
         }
 
 
@@ -238,6 +272,14 @@ namespace NWNMasterServer
     PRIMARY KEY (`stat_counter_name`)
     )");
 
+                MasterServer.ExecuteQueryNoReader(
+@"CREATE TABLE IF NOT EXISTS `blacklist_entries` (
+    `product_id` int(10) UNSIGNED NOT NULL,
+    `blacklist_entry_type` int(10) UNSIGNED NOT NULL,
+    `blacklist_entry_match` varchar(128) NOT NULL,
+    PRIMARY KEY (`product_id`, `blacklist_entry_type`, `blacklist_entry_match`)
+    )");
+
                 string Query = String.Format(
 @"SELECT `game_server_id`,
     `expansions_mask`,
@@ -267,6 +309,8 @@ FROM `game_servers`
 WHERE `product_id` = {0}
 AND `online` = true",
                     MasterServer.ProductID);
+
+                RefreshBlacklist();
 
                 ServersAdded = 0;
                 using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
@@ -300,6 +344,19 @@ AND `online` = true",
                                 e);
                             continue;
                         }
+
+                        //
+                        // Query for whether the server is blacklisted and do
+                        // not re-list it if so.
+                        //
+
+                        BlacklistLookup Lookup = new BlacklistLookup();
+
+                        Lookup.ServerAddress = ServerAddress;
+                        Lookup.ModuleName = Reader.GetString(3);
+
+                        if (IsBlacklisted(Lookup))
+                            continue;
 
                         NWGameServer Server = new NWGameServer(MasterServer, ServerAddress);
 
@@ -423,6 +480,8 @@ AND
                 Logger.Log(LogLevel.Error, "NWServerTracker.PendingGameServersSweepTimer_Elapsed(): Exception processing pending servers list: {0}.", ex);
             }
 
+            Thread.MemoryBarrier();
+
             if (!HeartbeatsEnabled)
                 return;
 
@@ -431,7 +490,6 @@ AND
                 PendingGameServersSweepTimer.Start();
             }
         }
-
 
         /// <summary>
         /// This timer callback runs when the scavenge sweep timer elapses.
@@ -507,12 +565,41 @@ LIMIT 50",
                 Logger.Log(LogLevel.Error, "NWServerTracker.ScavengeSweepTimer_Elapsed(): Excepton processing scavenge server list: {0}", ex);
             }
 
+            Thread.MemoryBarrier();
+
             if (!HeartbeatsEnabled)
                 return;
 
             lock (HeartbeatLock)
             {
                 ScavengerSweepTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// This timer callback runs when the blacklist sweep timer elapses.
+        /// Its purpose is to trigger a periodic refresh of the blacklist from
+        /// the database.
+        /// </summary>
+        /// <param name="sender">Unused.</param>
+        /// <param name="e">Unused.</param>
+        private void BlacklistSweepTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            try
+            {
+                RefreshBlacklist();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(LogLevel.Error, "NWServerTracker.BlacklistSweepTimer_Elapsed(): Exception refreshing blacklist: {0}", ex);
+            }
+
+            if (!HeartbeatsEnabled)
+                return;
+
+            lock (HeartbeatLock)
+            {
+                BlacklistSweepTimer.Start();
             }
         }
 
@@ -540,6 +627,47 @@ LIMIT 50",
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Reload the blacklist from the database.
+        /// </summary>
+        private void RefreshBlacklist()
+        {
+            List<BlacklistEntry> LocalBlacklist = new List<BlacklistEntry>();
+
+            string Query = String.Format(
+@"SELECT `blacklist_entry_type`, 
+    `blacklist_entry_match` 
+FROM 
+    `blacklist_entries` 
+WHERE 
+    `product_id` = {0}",
+                                 MasterServer.ProductID);
+
+            using (MySqlDataReader Reader = MasterServer.ExecuteQuery(Query))
+            {
+                while (Reader.Read())
+                {
+                    BlacklistEntry.BlacklistType EntryType = (BlacklistEntry.BlacklistType)Reader.GetUInt32(0);
+                    string EntryMatch = Reader.GetString(1);
+
+                    BlacklistEntry Entry = new BlacklistEntry(EntryMatch, EntryType);
+
+                    LocalBlacklist.Add(Entry);
+                }
+            }
+
+            //
+            // Exchange the current blacklist with the new version.  If a
+            // thread was using the old blacklist, the old object will remain
+            // valid (it is immutable once published) until all references are
+            // expunged and garbage collection collects the object.
+            //
+
+            Thread.MemoryBarrier();
+
+            Blacklist = LocalBlacklist;
         }
 
 
@@ -571,6 +699,12 @@ LIMIT 50",
         /// the background scavenger.
         /// </summary>
         private const int SCAVENGE_SWEEP_INTERVAL = 1 * 60 * 60 * 1000;
+
+        /// <summary>
+        /// The interval, in milliseconds, after which the blacklist will be
+        /// swept for new entries in the database.
+        /// </summary>
+        private const int BLACKLIST_SWEEP_INTERVAL = 24 * 60 * 60 * 1000;
 
         /// <summary>
         /// The number of days that a server will be periodically re-pinged by
@@ -620,6 +754,11 @@ LIMIT 50",
         private object HeartbeatLock = new object();
 
         /// <summary>
+        /// The blacklist used to refuse server listing.
+        /// </summary>
+        private List<BlacklistEntry> Blacklist = new List<BlacklistEntry>();
+
+        /// <summary>
         /// The timer used to trigger periodic scans of the
         /// pending_game_servers table for pulling in new server records from
         /// the web service API.
@@ -635,9 +774,92 @@ LIMIT 50",
         private System.Timers.Timer ScavengerSweepTimer = null;
 
         /// <summary>
+        /// This timer triggers a periodic refresh of the blacklist tables.
+        /// </summary>
+        private System.Timers.Timer BlacklistSweepTimer = null;
+
+        /// <summary>
         /// The server id of the last sever examined for scavenging.  If zero,
         /// then the scavenge cycle restarts next timer elapse.
         /// </summary>
         private uint ScavengeServerId = 0;
+    }
+
+    /// <summary>
+    /// This class contains data for a blacklist entry in the server blacklist.
+    /// </summary>
+    internal sealed class BlacklistEntry
+    {
+        /// <summary>
+        /// Construct a new BlacklistEntry object.
+        /// </summary>
+        /// <param name="Match">Supplies the match text.</param>
+        /// <param name="MatchType">Supplies the match type.</param>
+        internal BlacklistEntry(string Match, BlacklistType MatchType)
+        {
+            this.Match = new Regex(Match);
+            this.MatchType = MatchType;
+        }
+
+        /// <summary>
+        /// Attempt to match a blacklist entry against text of a specific type.
+        /// </summary>
+        /// <param name="TextToMatch">Supplies the text to match.</param>
+        /// <param name="TypeToMatch">Supplies the type of text to
+        /// match.</param>
+        /// <returns>True if the text and type are matched by this blacklist
+        /// entry.</returns>
+        internal bool IsBlacklistMatched(string TextToMatch, BlacklistType TypeToMatch)
+        {
+            if (TypeToMatch != MatchType)
+                return false;
+
+            return Match.IsMatch(TextToMatch);
+        }
+
+        /// <summary>
+        /// The type of blacklist entry.
+        /// </summary>
+        internal enum BlacklistType
+        {
+            /// <summary>
+            /// Blacklist based on the server address.
+            /// </summary>
+            BlacklistTypeServerAddress = 0,
+
+            /// <summary>
+            /// Blacklist based on the module name.
+            /// </summary>
+            BlacklistTypeModuleName = 1,
+        }
+
+        /// <summary>
+        /// The match regex for the blacklist.
+        /// </summary>
+        private Regex Match;
+
+        /// <summary>
+        /// The type of blacklist entry.
+        /// </summary>
+        private BlacklistType MatchType;
+    }
+
+    /// <summary>
+    /// This class is used to look up data in the blacklist in the form of a
+    /// structured query.
+    /// </summary>
+    internal sealed class BlacklistLookup
+    {
+        /// <summary>
+        /// The server address to match (else null if it is not considered for
+        /// matching).
+        /// </summary>
+        public IPEndPoint ServerAddress { get; set; }
+
+        /// <summary>
+        /// The module name to match (else null if it is not considered for
+        /// matching).
+        /// </summary>
+        public string ModuleName { get; set; }
     }
 }

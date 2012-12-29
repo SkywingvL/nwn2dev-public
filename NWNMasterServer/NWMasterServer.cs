@@ -851,6 +851,18 @@ namespace NWNMasterServer
             if (!Parser.ReadBYTE(out Unknown4))
                 return;
 
+            //
+            // Query for whether the sender is blacklisted and drop the message
+            // if so.
+            //
+
+            BlacklistLookup Lookup = new BlacklistLookup();
+
+            Lookup.ServerAddress = Sender;
+
+            if (ServerTracker.IsBlacklisted(Lookup))
+                return;
+
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
 
             //
@@ -877,6 +889,19 @@ namespace NWNMasterServer
             if (!Parser.ReadBYTE(out ExpansionsMask))
                 return;
             if (!Parser.ReadSmallString(out ModuleName, 16))
+                return;
+
+            //
+            // Query for whether the sender is blacklisted and drop the message
+            // if so.
+            //
+
+            BlacklistLookup Lookup = new BlacklistLookup();
+
+            Lookup.ServerAddress = Sender;
+            Lookup.ModuleName = ModuleName;
+
+            if (ServerTracker.IsBlacklisted(Lookup))
                 return;
 
             NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
@@ -1070,6 +1095,19 @@ namespace NWNMasterServer
                 Info.BuildNumber = 0;
             }
 
+            //
+            // Query for whether the sender is blacklisted and drop the message
+            // if so.
+            //
+
+            BlacklistLookup Lookup = new BlacklistLookup();
+
+            Lookup.ServerAddress = Sender;
+            Lookup.ModuleName = ModuleName;
+
+            if (ServerTracker.IsBlacklisted(Lookup))
+                return;
+
             Info.HasPlayerPassword = (HasPlayerPassword != 0);
             Info.MinLevel = MinLevel;
             Info.MaxLevel = MaxLevel;
@@ -1175,9 +1213,10 @@ namespace NWNMasterServer
             if (!Parser.ReadSmallString(out ServerName))
                 return;
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
 
-            Server.OnServerNameUpdate(ServerName);
+            if (Server != null)
+                Server.OnServerNameUpdate(ServerName);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerNameResponse(): Server {0} name is {1}.", Sender, ServerName);
         }
@@ -1233,9 +1272,10 @@ namespace NWNMasterServer
                 Build = 0;
             }
 
-            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender);
+            NWGameServer Server = ServerTracker.LookupServerByAddress(Sender, false);
 
-            Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl, Build, GameDetails);
+            if (Server != null)
+                Server.OnDescriptionInfoUpdate(ModuleDescription, ModuleUrl, GameType, PWCUrl, Build, GameDetails);
 
             Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerDescriptionResponse(): Server {0} description '{1}' URL '{2}' has game type {3}.",
                 Sender,
