@@ -140,13 +140,45 @@ namespace NWN
         /// given product.</returns>
         public uint GetOnlineUserCount(string Product)
         {
+            //
+            // Return a list of actual, unique players while accomodating
+            // linked server groups that forge the player count query response
+            // to indicate the global player count for the linked server group.
+            //
+            // The count of players from servers that return authentic player
+            // counts is first determined, and then the count of players from
+            // each linked server group that forges player counts is computed
+            // by simply taking the first available online server in the linked
+            // server group.
+            //
+
             string Query = String.Format(
-    @"SELECT
-        SUM(active_player_count)
-    FROM
-        `game_servers`
-    WHERE `product_id` = {0} 
-    AND `online` = true
+    @"SELECT 
+        SUM(`unique_player_count`) 
+    FROM 
+    (
+        SELECT 
+            SUM(`active_player_count`) AS 'unique_player_count'
+        FROM 
+            `game_servers` 
+        LEFT OUTER JOIN `game_server_groups` ON `game_server_groups`.`game_server_group_id` = `game_servers`.`game_server_group_id` 
+        WHERE `game_servers`.`product_id` = {0} 
+        AND `game_servers`.`online` = true 
+        AND (`game_server_groups`.`game_server_group_id` IS NULL 
+             OR `game_server_groups`.`global_user_counts` = 0) 
+
+        UNION 
+
+        SELECT 
+            `game_servers`.`active_player_count` AS 'unique_player_count' 
+        FROM 
+            `game_server_groups` 
+        INNER JOIN `game_servers` ON `game_server_groups`.`global_user_counts` = 1 
+        AND `game_servers`.`game_server_group_id` = `game_server_groups`.`game_server_group_id` 
+        AND `game_servers`.`product_id` = {0} 
+        AND `game_servers`.`online` = true 
+        GROUP BY (`game_servers`.`game_server_group_id`) 
+    ) AS `unique_player_count_subquery`
     ",
             ProductNameToId(Product));
 

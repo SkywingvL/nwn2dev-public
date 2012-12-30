@@ -239,12 +239,24 @@ namespace NWNMasterServer
     `ilr_enforced` bool NOT NULL,
     `pwc_url` varchar(256) NOT NULL,
     `server_description` varchar(256) NOT NULL,
+    `game_server_group_id` int(10) UNSIGNED,
     PRIMARY KEY (`game_server_id`),
     UNIQUE KEY (`product_id`, `server_address`),
     INDEX (`product_id`, `online`),
     INDEX (`product_id`, `online`, `server_name`),
     INDEX (`product_id`, `online`, `module_name`),
-    INDEX (`product_id`, `online`, `game_type`)
+    INDEX (`product_id`, `online`, `game_type`),
+    INDEX (`product_id`, `online`, `game_server_group_id`)
+    )");
+
+                MasterServer.ExecuteQueryNoReader(
+@"CREATE TABLE IF NOT EXISTS `game_server_groups` (
+    `game_server_group_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+    `product_id` int(10) UNSIGNED NOT NULL,
+    `group_name` varchar(128) NOT NULL,
+    `global_user_counts` bool NOT NULL,
+    PRIMARY KEY (`game_server_group_id`),
+    UNIQUE KEY (`product_id`, `group_name`)
     )");
 
                 MasterServer.ExecuteQueryNoReader(
@@ -278,10 +290,11 @@ namespace NWNMasterServer
 
                 MasterServer.ExecuteQueryNoReader(
 @"CREATE TABLE IF NOT EXISTS `blacklist_entries` (
+    `blacklist_entry_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
     `product_id` int(10) UNSIGNED NOT NULL,
     `blacklist_entry_type` int(10) UNSIGNED NOT NULL,
     `blacklist_entry_match` varchar(128) NOT NULL,
-    PRIMARY KEY (`product_id`, `blacklist_entry_type`, `blacklist_entry_match`)
+    PRIMARY KEY (`blacklist_entry_id`)
     )");
 
                 string Query = String.Format(
