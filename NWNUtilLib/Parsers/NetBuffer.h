@@ -34,7 +34,16 @@ namespace NWN
 				__in size_t BitDataLength
 				);
 
-			~ExoParseBuffer( );
+			inline ~ExoParseBuffer( )
+			{
+				this->!ExoParseBuffer();
+			}
+
+		private:
+
+			!ExoParseBuffer( );
+
+		public:
 
 			//
 			// Reads a counted string from the wire.  If the length is 32 bits,
@@ -1175,7 +1184,16 @@ namespace NWN
 
 			explicit ExoBuildBuffer( );
 
-			~ExoBuildBuffer( );
+			inline ~ExoBuildBuffer( )
+			{
+				this->!ExoBuildBuffer();
+			}
+
+		private:
+
+			!ExoBuildBuffer( );
+
+		public:
 
 			void
 			WriteCExoString(

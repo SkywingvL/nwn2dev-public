@@ -54,7 +54,7 @@ ExoParseBuffer::ExoParseBuffer(
 	}
 }
 
-ExoParseBuffer::~ExoParseBuffer( )
+ExoParseBuffer::!ExoParseBuffer( )
 {
 	delete m_BitStream;
 	delete m_ByteStream;
@@ -308,7 +308,7 @@ ExoBuildBuffer::ExoBuildBuffer(
 	}
 }
 
-ExoBuildBuffer::~ExoBuildBuffer( )
+ExoBuildBuffer::!ExoBuildBuffer( )
 {
 	delete m_BitStream;
 	delete m_ByteStream;

@@ -480,9 +480,10 @@ namespace NWNMasterServer
                 {
                     ExoParseBuffer ParseBuffer;
 
-                    ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 4, null, 0);
-
-                    OnRecvMstMessage(Cmd, ParseBuffer, Sender, Socket);
+                    using (ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 4, null, 0))
+                    {
+                        OnRecvMstMessage(Cmd, ParseBuffer, Sender, Socket);
+                    }
                 }
             }
         }
@@ -510,9 +511,10 @@ namespace NWNMasterServer
                 {
                     ExoParseBuffer ParseBuffer;
 
-                    ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 1, null, 0);
-
-                    OnRecvGameSpyMessage(Cmd, ParseBuffer, Sender, Socket);
+                    using (ParseBuffer = new ExoParseBuffer(ByteData, (uint)RecvLen - 1, null, 0))
+                    {
+                        OnRecvGameSpyMessage(Cmd, ParseBuffer, Sender, Socket);
+                    }
                 }
             }
         }
@@ -1295,15 +1297,16 @@ namespace NWNMasterServer
         /// code.</param>
         public void SendMstCommunityAccountAuthorization(IPEndPoint Address, string AccountName, ConnectStatus Status)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)MstCmd.CommunityAuthorization);
+                Builder.WriteSmallString(AccountName, 16);
+                Builder.WriteWORD((ushort)Status);
 
-            Builder.WriteDWORD((uint)MstCmd.CommunityAuthorization);
-            Builder.WriteSmallString(AccountName, 16);
-            Builder.WriteWORD((ushort)Status);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstCommunityAccountAuthorization(): Authorizing account {0} for server {1} with status {2}.", AccountName, Address, Status);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstCommunityAccountAuthorization(): Authorizing account {0} for server {1} with status {2}.", AccountName, Address, Status);
-
-            SendRawDataToMstClient(Address, Builder);
+                SendRawDataToMstClient(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1314,21 +1317,22 @@ namespace NWNMasterServer
         /// <param name="CDKeys">Supplies the CD-Key list.</param>
         public void SendMstCDKeyAuthorization(IPEndPoint Address, IList<CDKeyInfo> CDKeys)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
-
-            Builder.WriteDWORD((uint)MstCmd.CDKeyAuthorization);
-            Builder.WriteWORD((ushort)CDKeys.Count);
-
-            foreach (CDKeyInfo CDKey in CDKeys)
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
             {
-                Builder.WriteSmallString(CDKey.PublicCDKey, 16);
-                Builder.WriteWORD(CDKey.AuthStatus);
-                Builder.WriteWORD(CDKey.Product);
+                Builder.WriteDWORD((uint)MstCmd.CDKeyAuthorization);
+                Builder.WriteWORD((ushort)CDKeys.Count);
+
+                foreach (CDKeyInfo CDKey in CDKeys)
+                {
+                    Builder.WriteSmallString(CDKey.PublicCDKey, 16);
+                    Builder.WriteWORD(CDKey.AuthStatus);
+                    Builder.WriteWORD(CDKey.Product);
+                }
+
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstCDKeyAuthorization(): Authorizing {0} CD-Keys for server {1}.", CDKeys, Address);
+
+                SendRawDataToMstClient(Address, Builder);
             }
-
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstCDKeyAuthorization(): Authorizing {0} CD-Keys for server {1}.", CDKeys, Address);
-
-            SendRawDataToMstClient(Address, Builder);
         }
 
         /// <summary>
@@ -1339,13 +1343,14 @@ namespace NWNMasterServer
         /// <param name="Address">Supplies the message recipient.</param>
         public void SendMstDemandHeartbeat(IPEndPoint Address)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)MstCmd.DemandHeartbeat);
 
-            Builder.WriteDWORD((uint)MstCmd.DemandHeartbeat);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstDemandHeartbeat(): Requesting heartbeat for server {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstDemandHeartbeat(): Requesting heartbeat for server {0}.", Address);
-
-            SendRawDataToMstClient(Address, Builder);
+                SendRawDataToMstClient(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1356,14 +1361,15 @@ namespace NWNMasterServer
         /// <param name="Message">Supplies the announcement message.</param>
         public void SendMstMOTD(IPEndPoint Address, string Message)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)MstCmd.MOTDResponse);
+                Builder.WriteSmallString(Message, 16);
 
-            Builder.WriteDWORD((uint)MstCmd.MOTDResponse);
-            Builder.WriteSmallString(Message, 16);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstMOTD(): Sending MOTD to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstMOTD(): Sending MOTD to {0}.", Address);
-
-            SendRawDataToMstClient(Address, Builder);
+                SendRawDataToMstClient(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1374,14 +1380,15 @@ namespace NWNMasterServer
         /// <param name="BuildNumber">Supplies the build number string.</param>
         public void SendMstVersion(IPEndPoint Address, string BuildNumber)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)MstCmd.VersionResponse);
+                Builder.WriteSmallString(BuildNumber, 16);
 
-            Builder.WriteDWORD((uint)MstCmd.VersionResponse);
-            Builder.WriteSmallString(BuildNumber, 16);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstVersion(): Sending version to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstVersion(): Sending version to {0}.", Address);
-
-            SendRawDataToMstClient(Address, Builder);
+                SendRawDataToMstClient(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1393,14 +1400,15 @@ namespace NWNMasterServer
         /// </param>
         public void SendMstStatusResponse(IPEndPoint Address, MstStatus StatusFlags)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)MstCmd.StatusResponse);
+                Builder.WriteDWORD((ushort)StatusFlags);
 
-            Builder.WriteDWORD((uint)MstCmd.StatusResponse);
-            Builder.WriteDWORD((ushort)StatusFlags);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstStatusResponse(): Sending status response to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendMstStatusResponse(): Sending status response to {0}.", Address);
-
-            SendRawDataToMstClient(Address, Builder);
+                SendRawDataToMstClient(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1409,14 +1417,15 @@ namespace NWNMasterServer
         /// <param name="Address">Supplies the game server address.</param>
         public void SendServerInfoRequest(IPEndPoint Address)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)ConnAuthCmd.ServerInfoRequest);
+                Builder.WriteWORD((ushort)MasterServerPort);
 
-            Builder.WriteDWORD((uint)ConnAuthCmd.ServerInfoRequest);
-            Builder.WriteWORD((ushort)MasterServerPort);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerInfoRequest(): Sending server info request to {0}.", Address);
-
-            SendRawDataToMstClientNATDuplicate(Address, Builder);
+                SendRawDataToMstClientNATDuplicate(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1425,15 +1434,16 @@ namespace NWNMasterServer
         /// <param name="Address">Supplies the game server address.</param>
         public void SendServerNameRequest(IPEndPoint Address)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)ConnAuthCmd.ServerNameRequest);
+                Builder.WriteWORD((ushort)MasterServerPort);
+                Builder.WriteBYTE(0); // Request correlation cookie.
 
-            Builder.WriteDWORD((uint)ConnAuthCmd.ServerNameRequest);
-            Builder.WriteWORD((ushort)MasterServerPort);
-            Builder.WriteBYTE(0); // Request correlation cookie.
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerNameRequest(): Sending server name request to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerNameRequest(): Sending server name request to {0}.", Address);
-
-            SendRawDataToMstClientNATDuplicate(Address, Builder);
+                SendRawDataToMstClientNATDuplicate(Address, Builder);
+            }
         }
 
         /// <summary>
@@ -1442,14 +1452,15 @@ namespace NWNMasterServer
         /// <param name="Address">Supplies the game server address.</param>
         public void SendServerDescriptionRequest(IPEndPoint Address)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteDWORD((uint)ConnAuthCmd.ServerDescriptionRequest);
+                Builder.WriteWORD((ushort)MasterServerPort);
 
-            Builder.WriteDWORD((uint)ConnAuthCmd.ServerDescriptionRequest);
-            Builder.WriteWORD((ushort)MasterServerPort);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerDescriptionRequest(): Sending server description request to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendServerDescriptionRequest(): Sending server description request to {0}.", Address);
-
-            SendRawDataToMstClientNATDuplicate(Address, Builder);
+                SendRawDataToMstClientNATDuplicate(Address, Builder);
+            }
         }
 
 
@@ -1515,15 +1526,16 @@ namespace NWNMasterServer
         /// <param name="Address">Supplies the recipient address.</param>
         public void SendGameSpyCheckServerStatusResponse(IPEndPoint Address)
         {
-            ExoBuildBuffer Builder = new ExoBuildBuffer();
+            using (ExoBuildBuffer Builder = new ExoBuildBuffer())
+            {
+                Builder.WriteWORD(0xFDFE);
+                Builder.WriteBYTE((byte)GameSpyCmd.CheckServerStatus);
+                Builder.WriteDWORD(0);
 
-            Builder.WriteWORD(0xFDFE);
-            Builder.WriteBYTE((byte)GameSpyCmd.CheckServerStatus);
-            Builder.WriteDWORD(0);
+                Logger.Log(LogLevel.Verbose, "NWMasterServer.SendGameSpyCheckServerStatusResponse(): Sending GameSpy aliveness acknowledgement to {0}.", Address);
 
-            Logger.Log(LogLevel.Verbose, "NWMasterServer.SendGameSpyCheckServerStatusResponse(): Sending GameSpy aliveness acknowledgement to {0}.", Address);
-
-            SendRawDataToGameSpyClient(Address, Builder);
+                SendRawDataToGameSpyClient(Address, Builder);
+            }
         }
 
 
