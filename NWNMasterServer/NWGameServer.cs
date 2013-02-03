@@ -257,6 +257,9 @@ AND `server_address` = '{1}'",
                     Server.ILREnforced = Reader.GetBoolean(21);
                     PWCUrl = Reader.GetString(22);
                     ServerDescription = Reader.GetString(23);
+
+                    if (Online)
+                        StartHeartbeat();
                 }
             }
             catch (Exception e)
@@ -709,13 +712,13 @@ AND `server_address` = '{1}'",
                     ActivePlayerCount = 0;
                     Online = false;
                     Expired = true;
+                    Save();
                 }
             }
 
             if (Expired)
             {
                 Logger.Log(LogLevel.Normal, "NWGameServer.HeartbeatTimer_Elapsed(): Server {0} expired from online server list due to heartbeat timeout.", this);
-                Save();
                 return;
             }
 

@@ -1178,7 +1178,7 @@ namespace NWNMasterServer
 
                     if (ServerInternal.CheckForNATDuplicate(Server))
                     {
-                        Logger.Log(LogLevel.Verbose, "NWMasterServer.OnRecvServerInfoResponse(): Removing NAT duplicate server {0} in preference of server {1}.", Sender, InternalAddress);
+                        Logger.Log(LogLevel.Normal, "NWMasterServer.OnRecvServerInfoResponse(): Removing NAT duplicate server {0} in preference of server {1}.", Sender, InternalAddress);
                         return;
                     }
                 }
