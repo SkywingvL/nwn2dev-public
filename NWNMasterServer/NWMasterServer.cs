@@ -261,7 +261,7 @@ namespace NWNMasterServer
                     QueryCombineTimer.Start();
 
                 if (DirectQuery != null)
-                    MySqlHelper.ExecuteNonQuery(ConnectionString, Query);
+                    MySqlHelper.ExecuteNonQuery(ConnectionString, DirectQuery);
             }
             catch (Exception e)
             {

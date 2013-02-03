@@ -49,10 +49,11 @@ namespace NWNMasterServer
         /// Save the server to the database.  The server is assumed to be
         /// locked.
         /// </summary>
-        public void Save()
+        /// <returns>True if the save was successful.</returns>
+        public bool Save()
         {
             if (MasterServer.ConnectionString == null)
-                return;
+                return false;
 
             try
             {
@@ -187,7 +188,10 @@ ON DUPLICATE KEY UPDATE
                 Logger.Log(LogLevel.Error, "NWGameServer.Save(): Failed to save server {0}: Exception: {1}",
                     ServerAddress,
                     e);
+                return false;
             }
+
+            return true;
         }
 
         /// <summary>
@@ -712,7 +716,12 @@ AND `server_address` = '{1}'",
                     ActivePlayerCount = 0;
                     Online = false;
                     Expired = true;
-                    Save();
+
+                    if (!Save())
+                    {
+                        Logger.Log(LogLevel.Error, "NWGameServer.HeartbeatTimer_Elapsed(): Server {0} could not be saved as expired.", this);
+                        Expired = false;
+                    }
                 }
             }
 
