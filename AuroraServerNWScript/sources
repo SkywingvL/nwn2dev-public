@@ -1,0 +1,65 @@
+TARGETNAME=AuroraServerNWScript
+TARGETTYPE=DYNLINK
+UMTYPE=windows
+DLLENTRY=_DllMainCRTStartup
+DLLDEF=AuroraServerNWScript.def
+
+TARGET_DESTINATION=release
+
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WINXP)
+
+BUILD_CONSUMES=              \
+               ZLIB          \
+               MINIZIP       \
+               SKYWINGUTILS  \
+               NWNBASELIB    \
+               NWN2MATHLIB   \
+               GRANNY2LIB    \
+               NWN2DATALIB   \
+               NWNSCRIPTLIB  \
+
+BUILD_PRODUCES=AURORASERVERNWSCRIPT
+
+TARGETLIBS=                                                         \
+            $(SDK_LIB_PATH)\kernel32.lib                            \
+            $(SDK_LIB_PATH)\ws2_32.lib                              \
+            $(OBJPATH)..\zlib\$(O)\zlib.lib                         \
+            $(OBJPATH)..\minizip\$(O)\minizip.lib                   \
+            $(OBJPATH)..\SkywingUtils\Build\$(O)\SkywingUtils.lib   \
+            $(OBJPATH)..\NWNBaseLib\$(O)\NWNBaseLib.lib             \
+            $(OBJPATH)..\NWN2MathLib\$(O)\NWN2MathLib.lib           \
+            $(OBJPATH)..\Granny2Lib\$(O)\Granny2Lib.lib             \
+            $(OBJPATH)..\NWN2DataLib\$(O)\NWN2DataLib.lib           \
+            $(OBJPATH)..\NWNScriptLib\$(O)\NWNScriptLib.lib         
+
+
+USE_ATL=1
+ATL_VER=71
+USE_STL=1
+USE_NATIVE_EH=CTHROW
+USE_MSVCRT=1
+
+PRECOMPILED_CXX=1
+PRECOMPILED_INCLUDE=Precomp.h
+
+MSC_WARNING_LEVEL=/W4 /WX
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH);$(EXTSDK_INC_PATH)
+
+C_DEFINES=$(C_DEFINES) -DUNICODE -D_UNICODE
+
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+!if $(WIN64)
+DLLBASE=0x0000000131000000
+!else
+DLLBASE=0x31000000
+!endif
+
+SOURCES=                                \
+		  Hooks.cpp                       \
+		  Log.cpp                         \
+		  NWScriptBridge.cpp              \
+		  NWScriptRuntime.cpp             \
+		  Patch.cpp                       \
+		  ServerNWScript.cpp               

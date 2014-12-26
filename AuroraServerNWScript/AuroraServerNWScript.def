@@ -1,0 +1,6 @@
+LIBRARY	"AuroraServerNWScript"
+
+EXPORTS
+
+	GetPluginPointerV2
+

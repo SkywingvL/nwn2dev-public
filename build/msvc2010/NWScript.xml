@@ -1,0 +1,196 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ProjectSchemaDefinitions xmlns="clr-namespace:Microsoft.Build.Framework.XamlTypes;assembly=Microsoft.Build.Framework" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:sys="clr-namespace:System;assembly=mscorlib" xmlns:transformCallback="Microsoft.Cpp.Dev10.ConvertPropertyCallback">
+  <Rule
+    Name="NWScript"
+    PageTemplate="tool"
+    DisplayName="NWScript Compiler"
+    Order="200">
+      
+    <Rule.DataSource>
+      <DataSource
+        Persistence="ProjectFile"
+        ItemType="NWScript" />
+    </Rule.DataSource>
+      
+    <Rule.Categories>
+        
+      <Category
+        Name="General">
+        <Category.DisplayName>
+          <sys:String>General</sys:String>
+        </Category.DisplayName>
+      </Category>
+
+      <Category
+        Name="Files">
+          <Category.DisplayName>
+              <sys:String>Files</sys:String>
+          </Category.DisplayName>
+      </Category>
+        
+      <Category
+        Name="Command Line"
+        Subtype="CommandLine">
+        <Category.DisplayName>
+          <sys:String>Command Line</sys:String>
+        </Category.DisplayName>
+      </Category>
+        
+    </Rule.Categories>
+
+    <StringListProperty
+      Name="Inputs"
+      Category="Command Line"
+      IsRequired="true"
+      Switch=" ">
+      <StringListProperty.DataSource>
+        <DataSource
+          Persistence="ProjectFile"
+          ItemType="NWScriptSettings"
+          SourceType="Item" />
+      </StringListProperty.DataSource>
+    </StringListProperty>
+    
+    <BoolProperty
+      Name="NoDebug"
+      Subcategory="Configuration"
+      HelpContext="0"
+      DisplayName="Suppress Debug Information"
+      Description="Disable debug symbols creation"
+      Switch="-g" />
+
+    <StringListProperty
+      Name="IncludePaths"
+      Subcategory="Configuration"
+      HelpContext="0"
+      DisplayName="Include Paths"
+      Description="Set the paths for any additional include files"
+      Switch="-i &quot;[value]&quot;" />
+    
+    <StringProperty
+      Name="ObjectFile"
+      Subcategory="Output"
+      HelpContext="0"
+      DisplayName="Object File Name"
+      Description="Select the output file name"
+      Switch="-b &quot;[value]&quot;" />
+    
+    <StringProperty
+      Name="CompilerVersion"
+      Subcategory="Configuration"
+      HelpContext="0"
+      DisplayName="Compiler Version"
+      Description="BioWare-compatible compiler version number to emulate"
+      Switch="-v[value]" />
+        
+    <BoolProperty
+      Name="Optimize"
+      Subcategory="Configuration"
+      HelpContext="0"
+      DisplayName="Optimizations"
+      Description="Optimize the compiled script"
+      Switch="-o" />
+    
+    <BoolProperty
+      Name="EnableExtensions"
+      Subcategory="Configuration"
+      HelpContext="0"
+      DisplayName="Enable Extensions"
+      Description="Enable non-BioWare script extensions"
+      Switch="-e" />
+    
+    <StringProperty
+      Name="CommandLineTemplate"
+      DisplayName="Command Line"
+      Visible="False"
+      IncludeInCommandLine="False" />
+    
+    <DynamicEnumProperty
+      Name="NWScriptBeforeTargets"
+      Category="General"
+      EnumProvider="Targets"
+      IncludeInCommandLine="False">
+      <DynamicEnumProperty.DisplayName>
+        <sys:String>Execute Before</sys:String>
+      </DynamicEnumProperty.DisplayName>
+      <DynamicEnumProperty.Description>
+        <sys:String>Specifies the targets for the build customization to run before.</sys:String>
+      </DynamicEnumProperty.Description>
+      <DynamicEnumProperty.ProviderSettings>
+        <NameValuePair
+          Name="Exclude"
+          Value="^NWScriptBeforeTargets|^Compute" />
+      </DynamicEnumProperty.ProviderSettings>
+      <DynamicEnumProperty.DataSource>
+        <DataSource
+          Persistence="ProjectFile"
+          HasConfigurationCondition="true" />
+      </DynamicEnumProperty.DataSource>
+    </DynamicEnumProperty>
+    
+    <DynamicEnumProperty
+      Name="NWScriptAfterTargets"
+      Category="General"
+      EnumProvider="Targets"
+      IncludeInCommandLine="False">
+      <DynamicEnumProperty.DisplayName>
+        <sys:String>Execute After</sys:String>
+      </DynamicEnumProperty.DisplayName>
+      <DynamicEnumProperty.Description>
+        <sys:String>Specifies the targets for the build customization to run after.</sys:String>
+      </DynamicEnumProperty.Description>
+      <DynamicEnumProperty.ProviderSettings>
+        <NameValuePair
+          Name="Exclude"
+          Value="^NWScriptAfterTargets|^Compute" />
+      </DynamicEnumProperty.ProviderSettings>
+      <DynamicEnumProperty.DataSource>
+        <DataSource
+          Persistence="ProjectFile"
+          ItemType=""
+          HasConfigurationCondition="true" />
+      </DynamicEnumProperty.DataSource>
+    </DynamicEnumProperty>
+    
+    <StringListProperty
+      Name="Outputs"
+      DisplayName="Outputs"
+      Visible="False"
+      IncludeInCommandLine="False" />
+    
+    <StringProperty
+      Name="ExecutionDescription"
+      DisplayName="Execution Description"
+      Visible="False"
+      IncludeInCommandLine="False" />
+    
+    <StringListProperty
+      Name="AdditionalDependencies"
+      DisplayName="Additional Dependencies"
+      IncludeInCommandLine="False"
+      Visible="true" />
+    
+    <StringProperty
+      Subtype="AdditionalOptions"
+      Name="AdditionalOptions"
+      Category="Command Line">
+      <StringProperty.DisplayName>
+        <sys:String>Additional Options</sys:String>
+      </StringProperty.DisplayName>
+      <StringProperty.Description>
+        <sys:String>Additional Options</sys:String>
+      </StringProperty.Description>
+    </StringProperty>
+  </Rule>
+  
+  <ItemType
+    Name="NWScript"
+    DisplayName="NWScript Compiler" />
+  <FileExtension
+    Name="*.nss"
+    ContentType="NWScript" />
+  <ContentType
+    Name="NWScript"
+    DisplayName="NWScript Compiler"
+    ItemType="NWScript" />
+</ProjectSchemaDefinitions>

@@ -1,0 +1,53 @@
+TARGETNAME=UpdateModTemplates
+TARGETTYPE=PROGRAM
+UMTYPE=console
+UMENTRY=main
+
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WINXP)
+
+BUILD_CONSUMES=              \
+               ZLIB          \
+               MINIZIP       \
+               SKYWINGUTILS  \
+               NWNBASELIB    \
+               NWN2MATHLIB   \
+               GRANNY2LIB    \
+               NWN2DATALIB
+
+BUILD_PRODUCES=UPDATEMODTEMPLATES
+
+TARGETLIBS=                                                        \
+           $(OBJPATH)..\zlib\$(O)\zlib.lib                         \
+           $(OBJPATH)..\minizip\$(O)\minizip.lib                   \
+           $(OBJPATH)..\SkywingUtils\Build\$(O)\SkywingUtils.lib   \
+           $(OBJPATH)..\NWNBaseLib\$(O)\NWNBaseLib.lib             \
+           $(OBJPATH)..\NWN2MathLib\$(O)\NWN2MathLib.lib           \
+           $(OBJPATH)..\Granny2Lib\$(O)\Granny2Lib.lib             \
+           $(OBJPATH)..\NWN2DataLib\$(O)\NWN2DataLib.lib           
+
+USE_ATL=1
+ATL_VER=71
+USE_STL=1
+USE_NATIVE_EH=CTHROW
+USE_MSVCRT=1
+
+SXS_MANIFEST=UpdateModTemplates.manifest
+SXS_MANIFEST_IN_RESOURCES=1
+SXS_MANIFEST_RESOURCE_ID=1
+SXS_ASSEMBLY_VERSION=1.0
+SXS_ASSEMBLY_NAME=UpdateModTemplates
+SXS_ASSEMBLY_LANGUAGE=0000
+SXS_NO_BINPLACE=1
+
+PRECOMPILED_CXX=1
+PRECOMPILED_INCLUDE=Precomp.h
+
+MSC_WARNING_LEVEL=/W4 /WX
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH);$(EXTSDK_INC_PATH)
+C_DEFINES=$(C_DEFINES) -DUNICODE -D_UNICODE
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+SOURCES=                         \
+        UpdateModTemplates.cpp   \
+        UpdateModTemplates.rc     

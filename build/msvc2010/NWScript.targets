@@ -1,0 +1,83 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <PropertyPageSchema
+      Include="$(MSBuildThisFileDirectory)$(MSBuildThisFileName).xml" />
+    <AvailableItemName
+      Include="NWScript">
+      <Targets>NWScript Compiler</Targets>
+    </AvailableItemName>
+  </ItemGroup>
+  <UsingTask
+    TaskName="NWScript"
+    TaskFactory="XamlTaskFactory"
+    AssemblyName="Microsoft.Build.Tasks.v4.0">
+    <Task>$(MSBuildThisFileDirectory)$(MSBuildThisFileName).xml</Task>
+  </UsingTask>
+  <Target
+    Name="NWScript Compiler"
+    BeforeTargets="$(NWScriptBeforeTargets)"
+    AfterTargets="$(NWScriptAfterTargets)"
+    Condition="'@(NWScript)' != ''"
+    DependsOnTargets="$(NWScriptDependsOn);ComputeNWScriptOutput"
+    Outputs="@(NWScript->'%(ObjectFile)')"
+    Inputs="@(NWScript);%(NWScript.AdditionalDependencies);$(MSBuildProjectFile)">
+    <ItemGroup
+      Condition="'@(SelectedFiles)' != ''">
+      <NWScript
+        Remove="@(NWScript)"
+        Condition="'%(Identity)' != '@(SelectedFiles)'" />
+    </ItemGroup>
+    <ItemGroup>
+      <NWScript_tlog
+        Include="%(NWScript.ObjectFile)"
+        Condition="'%(NWScript.ObjectFile)' != '' and '%(NWScript.ExcludedFromBuild)' != 'true'">
+        <Source>@(NWScript, '|')</Source>
+      </NWScript_tlog>
+    </ItemGroup>
+    <Message
+      Importance="High"
+      Text="%(NWScript.ExecutionDescription)" />
+    <WriteLinesToFile
+      Condition="'@(NWScript_tlog)' != '' and '%(NWScript_tlog.ExcludedFromBuild)' != 'true'"
+      File="$(IntDir)$(ProjectName).write.1.tlog"
+      Lines="^%(NWScript_tlog.Source);@(NWScript_tlog->'%(Fullpath)')" />
+    <NWScript
+      Condition="'@(NWScript)' != '' and '%(NWScript.ExcludedFromBuild)' != 'true'"
+      CommandLineTemplate="%(NWScript.CommandLineTemplate)"
+      NoDebug="%(NWScript.NoDebug)"
+      IncludePaths="%(NWScript.IncludePaths)"
+      CompilerVersion="%(NWScript.CompilerVersion)"
+      Optimize="%(NWScript.Optimize)"
+      EnableExtensions="%(NWScript.EnableExtensions)"
+      AdditionalOptions="%(NWScript.AdditionalOptions)"
+      Inputs="@(NWScript)"
+      ObjectFile="%(NWScript.ObjectFile)" />
+  </Target>
+  <PropertyGroup>
+    <ComputeLinkInputsTargets>
+            $(ComputeLinkInputsTargets);
+            ComputeNWScriptOutput;
+          </ComputeLinkInputsTargets>
+    <ComputeLibInputsTargets>
+            $(ComputeLibInputsTargets);
+            ComputeNWScriptOutput;
+          </ComputeLibInputsTargets>
+  </PropertyGroup>
+  <Target
+    Name="ComputeNWScriptOutput"
+    Condition="'@(NWScript)' != ''">
+    <ItemGroup>
+      <NWScriptDirsToMake
+        Condition="'@(NWScript)' != '' and '%(NWScript.ExcludedFromBuild)' != 'true' and !HasTrailingSlash('%(NWScript.ObjectFile)')"
+        Include="%(NWScript.ObjectFile)" />
+    </ItemGroup>
+    <ItemGroup>
+      <NWScriptDirsToMake
+        Condition="'@(NWScript)' != '' and '%(NWScript.ExcludedFromBuild)' != 'true' and HasTrailingSlash('%(NWScript.ObjectFile)')"
+        Include="@(NWScript->'%(ObjectFile)%(Filename).ncs')" />
+    </ItemGroup>
+    <MakeDir
+      Directories="@(NWScriptDirsToMake->'%(RootDir)%(Directory)')" />
+  </Target>
+</Project>

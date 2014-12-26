@@ -1,0 +1,30 @@
+TARGETNAME=NWN2_ScriptSrc
+TARGETTYPE=NOTARGET
+SOURCES=
+
+TARGET_DESTINATION=release
+
+BUILD_NO_SYMCHK=1
+
+NSS_OBJECTS=                                                   \
+            $(OBJ_PATH)\$O\gui_test_badcodegen_do_switch.ncs   \
+            $(OBJ_PATH)\$O\gui_test_badcodegen_neststructs.ncs \
+            $(OBJ_PATH)\$O\gui_test_default_functions.ncs      \
+            $(OBJ_PATH)\$O\gui_test_delay.ncs                  \
+            $(OBJ_PATH)\$O\gui_test_forcefollowobject.ncs      \
+            $(OBJ_PATH)\$O\gui_test_globals.ncs                \
+            $(OBJ_PATH)\$O\gui_test_intrinsics.ncs             \
+            $(OBJ_PATH)\$O\gui_test_localoverflow.ncs          \
+            $(OBJ_PATH)\$O\gui_test_loop.ncs                   \
+            $(OBJ_PATH)\$O\gui_test_math.ncs                   \
+            $(OBJ_PATH)\$O\gui_test_objectattributes.ncs       \
+            $(OBJ_PATH)\$O\gui_test_opengui.ncs                \
+            $(OBJ_PATH)\$O\gui_test_scriptparams.ncs           \
+            $(OBJ_PATH)\$O\gui_test_structfwddecl.ncs          \
+            $(OBJ_PATH)\$O\gui_test_structregress.ncs          \
+            $(OBJ_PATH)\$O\gui_test_switch_case.ncs            \
+            $(OBJ_PATH)\$O\gui_test_timer.ncs                  \
+
+NTTARGETFILE0=$(OBJ_PATH)\$O\ScriptSrc
+PASS1_BINPLACE=/:DEST $(TARGET_DESTINATION)\TestScripts        \
+              $(NSS_OBJECTS) $(NSS_OBJECTS:.ncs=.ndb) $(NSS_OBJECTS:.ncs=.nss)

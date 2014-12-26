@@ -1,0 +1,15 @@
+/*++
+
+Copyright (c) Ken Johnson (Skywing). All rights reserved.
+
+Module Name:
+
+	UpdateModTemplates.rc
+
+Abstract:
+
+	This module defines resource information for the program, such as the
+	embedded version resource.
+
+--*/
+

@@ -1,0 +1,13 @@
+LIBRARY	"NWNScriptCompilerDll.ndl"
+
+VERSION 1,00
+
+EXPORTS  
+	NscCreateCompiler
+	NscCompileScriptExternal
+	NscDeleteCompiler
+	NscGetEntrypointSymbolName=I_NscGetEntrypointSymbolName
+	NscGetFunctionParameterCount
+	NscGetCompilerBuildDate
+	NscGetFunctionParameterType
+	NscGetFunctionReturnType

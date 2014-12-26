@@ -1,0 +1,73 @@
+TARGETNAME=NWNScriptConsole
+TARGETTYPE=PROGRAM
+UMTYPE=console
+UMENTRY=wmain
+
+TARGET_DESTINATION=release
+
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WINXP)
+
+BUILD_CONSUMES=                       \
+               ZLIB                   \
+               MINIZIP                \
+               SKYWINGUTILS           \
+               NWNBASELIB             \
+               NWN2MATHLIB            \
+               GRANNY2LIB             \
+               NWN2DATALIB            \
+               NWNSCRIPTLIB           \
+               NWNSCRIPTCOMPILERLIB    
+
+BUILD_PRODUCES=NWNSCRIPTCONSOLE
+
+TARGETLIBS=                                                                  \
+            $(SDK_LIB_PATH)\kernel32.lib                                     \
+            $(SDK_LIB_PATH)\user32.lib                                       \
+            $(SDK_LIB_PATH)\gdi32.lib                                        \
+            $(SDK_LIB_PATH)\advapi32.lib                                     \
+            $(SDK_LIB_PATH)\shell32.lib                                      \
+            $(SDK_LIB_PATH)\ws2_32.lib                                       \
+            $(SDK_LIB_PATH)\comctl32.lib                                     \
+            $(SDK_LIB_PATH)\msimg32.lib                                      \
+            $(SDK_LIB_PATH)\ole32.lib                                        \
+            $(SDK_LIB_PATH)\oleaut32.lib                                     \
+            $(OBJPATH)..\zlib\$(O)\zlib.lib                                  \
+            $(OBJPATH)..\minizip\$(O)\minizip.lib                            \
+            $(OBJPATH)..\SkywingUtils\Build\$(O)\SkywingUtils.lib            \
+            $(OBJPATH)..\NWNBaseLib\$(O)\NWNBaseLib.lib                      \
+            $(OBJPATH)..\NWN2MathLib\$(O)\NWN2MathLib.lib                    \
+            $(OBJPATH)..\Granny2Lib\$(O)\Granny2Lib.lib                      \
+            $(OBJPATH)..\NWN2DataLib\$(O)\NWN2DataLib.lib                    \
+            $(OBJPATH)..\NWNScriptLib\$(O)\NWNScriptLib.lib                  \
+            $(OBJPATH)..\NWNScriptCompilerLib\$(O)\NWNScriptCompilerLib.lib   
+
+USE_ATL=1
+ATL_VER=71
+USE_STL=1
+USE_NATIVE_EH=CTHROW
+USE_MSVCRT=1
+LINKER_FLAGS=$(LINKER_FLAGS)
+
+PRECOMPILED_CXX=1
+PRECOMPILED_INCLUDE=Precomp.h
+
+MSC_WARNING_LEVEL=/W4 /WX
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH);$(EXTSDK_INC_PATH)
+C_DEFINES=$(C_DEFINES) -DUNICODE -D_UNICODE
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+!if $(WIN64)
+UMBASE=0x000000012a000000
+!else
+UMBASE=0x2a000000
+!endif
+
+SOURCES=                                \
+        AppParams.cpp                   \
+        Main.cpp                        \
+        NWScriptActionActions.cpp       \
+        NWScriptHost.cpp                \
+        NWScriptMathActions.cpp         \
+        NWScriptSimpleActions.cpp       \
+        NWScriptStubActions.cpp         

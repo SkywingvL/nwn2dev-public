@@ -1,0 +1,17 @@
+TARGETNAME=minizip
+TARGETTYPE=LIBRARY
+BUILD_PRODUCES=MINIZIP
+
+USE_MSVCRT=1
+USE_NATIVE_EH=1
+
+MSC_WARNING_LEVEL=/W2
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH);..\zlib
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+SOURCES=           \
+        ioapi.c    \
+        iowin32.c  \
+        mztools.c  \
+        unzip.c    

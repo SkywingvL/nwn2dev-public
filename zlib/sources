@@ -1,0 +1,25 @@
+TARGETNAME=zlib
+TARGETTYPE=LIBRARY
+BUILD_PRODUCES=ZLIB
+
+USE_MSVCRT=1
+USE_NATIVE_EH=1
+
+MSC_WARNING_LEVEL=/W2
+
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH)
+
+SOURCES=           \
+        adler32.c  \
+        compress.c \
+		  crc32.c    \
+        deflate.c  \
+        infback.c  \
+        inffast.c  \
+        inflate.c  \
+        inftrees.c \
+        trees.c    \
+        uncompr.c  \
+        zutil.c

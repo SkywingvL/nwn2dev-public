@@ -1,0 +1,24 @@
+TARGETNAME=Granny2Lib
+TARGETTYPE=LIBRARY
+BUILD_PRODUCES=GRANNY2LIB
+
+USE_ATL=1
+ATL_VER=71
+USE_STL=1
+USE_MSVCRT=1
+USE_NATIVE_EH=CTHROW
+
+PRECOMPILED_CXX=1
+PRECOMPILED_INCLUDE=Precomp.h
+
+MSC_WARNING_LEVEL=/W2
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH);$(EXTSDK_INC_PATH)
+
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+SOURCES=                  \
+        GR2Format.cpp     \
+        Granny2Reader.cpp \
+        maximpl.cpp       \
+        NWN2Format.cpp    

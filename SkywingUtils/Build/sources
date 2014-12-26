@@ -1,0 +1,22 @@
+TARGETNAME=SkywingUtils
+TARGETTYPE=LIBRARY
+BUILD_PRODUCES=SKYWINGUTILS
+
+USE_ATL=1
+ATL_VER=71
+USE_STL=1
+USE_NATIVE_EH=CTHROW
+USE_MSVCRT=1
+
+PRECOMPILED_CXX=1
+PRECOMPILED_INCLUDE=Precomp.h
+
+MSC_WARNING_LEVEL=/W4 /WX
+
+INCLUDES=$(INCLUDES);$(DDK_INC_PATH);$(EXTSDK_INC_PATH)
+USER_C_FLAGS=$(USER_C_FLAGS)
+
+SOURCES=                      \
+        CharsetConv.cpp       \
+        BufferParser.cpp      \
+        TimerManager.cpp       

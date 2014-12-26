@@ -1,0 +1,19 @@
+DIRS=                     \
+     zlib                 \
+     minizip              \
+     SkywingUtils         \
+     NWNBaseLib           \
+     NWN2MathLib          \
+     Granny2Lib           \
+     NWN2DataLib          \
+     NWNScriptLib         \
+     NWNScriptCompilerLib \
+     SkywingUtils         \
+     NWNScriptConsole     \
+     Gr2Conv{x86}         \
+     ModelRenderer        \
+     ListModuleAreas      \
+     ListModuleModels     \
+     UpdateModTemplates   \
+     NWNScriptCompiler    \
+     NWNScriptCompilerDll 

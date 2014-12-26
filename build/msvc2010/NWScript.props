@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup
+    Condition="'$(NWScriptBeforeTargets)' == '' and '$(NWScriptAfterTargets)' == '' and '$(ConfigurationType)' != 'Makefile'">
+    <NWScriptBeforeTargets>Midl</NWScriptBeforeTargets>
+    <NWScriptAfterTargets>CustomBuild</NWScriptAfterTargets>
+  </PropertyGroup>
+  <PropertyGroup>
+    <NWScriptDependsOn
+      Condition="'$(ConfigurationType)' != 'Makefile'">_SelectedFiles;$(NWScriptDependsOn)</NWScriptDependsOn>
+  </PropertyGroup>
+  <PropertyGroup>
+    <NWNScriptCompilerPath Condition= "'$(NWNSCRIPTCOMPILERPATH)' == ''">..\..\..\External\NWScript\exe\win32\x86\</NWNScriptCompilerPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <NWScript>
+      <NoDebug>False</NoDebug>
+      <ObjectFile>$(IntDir)</ObjectFile>
+      <IncludePaths>..\..\..\External\NWScript\inc\NWN2</IncludePaths>
+      <CompilerVersion>169</CompilerVersion>
+      <Optimize>True</Optimize>
+      <EnableExtensions>True</EnableExtensions>
+      <CommandLineTemplate>"$(NWNScriptCompilerPath)NWNScriptCompiler.exe" -q -x &quot;error &quot; -c [AllOptions] [AdditionalOptions] [Inputs] [ObjectFile]</CommandLineTemplate>
+      <Outputs>%(ObjectFile)</Outputs>
+      <ExecutionDescription>(NWScript) Compiling %(Filename)%(Extension)</ExecutionDescription>
+      <ShowOnlyRuleProperties>false</ShowOnlyRuleProperties>
+    </NWScript>
+  </ItemDefinitionGroup>
+</Project>

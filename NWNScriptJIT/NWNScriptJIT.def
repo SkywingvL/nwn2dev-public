@@ -1,0 +1,19 @@
+LIBRARY NWNScriptJIT
+
+EXPORTS
+
+	NWScriptGenerateCode
+	NWScriptDeleteProgram
+	NWScriptSaveState
+	NWScriptDeleteSavedState
+	NWScriptExecuteScript
+	NWScriptExecuteScriptSituation
+	NWScriptAbortScript
+	NWScriptIsScriptAborted
+	NWScriptCheckVersion
+	NWScriptGetEngineName
+	NWScriptDuplicateScriptSituation
+	NWScriptPushScriptSituation
+	NWScriptPopScriptSituation
+	NWScriptCreateManagedSupport
+	NWScriptDeleteManagedSupport
